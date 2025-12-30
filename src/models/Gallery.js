@@ -1,10 +1,13 @@
 const mongoose = require('mongoose');
 
 const gallerySchema = new mongoose.Schema({
-    clubId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Club',
-        required: [true, 'Club ID is required']
+    imageUrl: {
+        type: String,
+        required: [true, 'Image URL is required']
+    },
+    publicId: {
+        type: String,
+        required: [true, 'Public ID is required']
     },
     title: {
         type: String,
@@ -14,47 +17,59 @@ const gallerySchema = new mongoose.Schema({
         type: String,
         trim: true
     },
-    images: [{
-        url: {
-            type: String,
-            required: true
-        },
-        publicId: {
-            type: String,
-            required: true
-        },
-        caption: String,
-        uploadedBy: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'User'
-        },
-        uploadedAt: {
-            type: Date,
-            default: Date.now
-        }
-    }],
+    uploadedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    clubId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Club'
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+    },
+    approvedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
     category: {
         type: String,
         enum: ['event', 'meeting', 'workshop', 'social', 'achievement', 'other'],
         default: 'other'
     },
-    eventDate: Date,
     tags: [String],
-    isPublic: {
-        type: Boolean,
-        default: true
-    },
-    createdBy: {
+    likes: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+        ref: 'User'
+    }],
+    comments: [{
+        user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true
+        },
+        text: {
+            type: String,
+            required: true
+        },
+        createdAt: {
+            type: Date,
+            default: Date.now
+        }
+    }],
+    viewCount: {
+        type: Number,
+        default: 0
     }
 }, {
     timestamps: true
 });
 
 // Index for efficient queries
-gallerySchema.index({ clubId: 1, createdAt: -1 });
+gallerySchema.index({ status: 1, createdAt: -1 });
 gallerySchema.index({ category: 1 });
 gallerySchema.index({ tags: 1 });
 

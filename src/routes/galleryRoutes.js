@@ -9,11 +9,11 @@ const {
     getLikedUsers
 } = require('../controllers/galleryController');
 const { protect, authorize } = require('../middleware/auth');
-const { uploadImage: uploadMiddleware } = require('../middleware/upload');
+const upload = require('../middleware/upload');
 
 router.route('/')
     .get(getGalleryImages)
-    .post(protect, uploadMiddleware.single('image'), uploadImage);
+    .post(protect, upload.single('image'), uploadImage);
 
 router.put('/:id/status', protect, authorize('admin'), updateImageStatus);
 router.post('/:id/like', protect, toggleLike);

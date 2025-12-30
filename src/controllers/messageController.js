@@ -44,7 +44,7 @@ exports.getMessages = async (req, res) => {
  */
 exports.sendMessage = async (req, res) => {
     try {
-        const { receiverId, content, type, fileUrl, clubId, replyTo, mentionAI } = req.body;
+        const { receiverId, content, type, fileUrl, clubId, replyTo, mentionAI, forwarded, isForwarded } = req.body;
         const senderId = req.user._id;
 
         const newMessage = await Message.create({
@@ -55,7 +55,8 @@ exports.sendMessage = async (req, res) => {
             fileUrl,
             clubId,
             replyTo,
-            mentionAI: mentionAI || false
+            mentionAI: mentionAI || false,
+            forwarded: forwarded || isForwarded || false
         });
 
         // Populate sender info for the real-time update
@@ -113,7 +114,7 @@ exports.sendMessage = async (req, res) => {
                 const aiResponse = {
                     ...aiMessage.toObject(),
                     senderId: {
-                        _id: 'AI',
+                        _id: '000000000000000000000000',
                         displayName: 'Eta (AI Assistant)',
                         profilePicture: null
                     }

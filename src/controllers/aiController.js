@@ -76,7 +76,7 @@ exports.handleAIMention = async (senderId, receiverId, conversationMessages, men
 
         // Create AI message
         const aiMessage = await Message.create({
-            senderId: 'AI', // Special sender ID for AI
+            senderId: '000000000000000000000000', // Special valid ObjectId for AI
             receiverId: senderId,
             content: aiResponse,
             type: 'text',
