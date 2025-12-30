@@ -447,7 +447,33 @@ exports.getDashboardData = async (req, res) => {
                     attendanceRate: globalAttendanceRateStr
                 },
                 clubStats,
-                recentMeetings: processedRecentMeetings
+                recentMeetings: processedRecentMeetings,
+                birthdays: await (async () => {
+                    const todayMonth = now.getMonth() + 1;
+                    const todayDay = now.getDate();
+
+                    // Find all users with birthday today
+                    const birthdayUsers = await User.find({
+                        birthDate: { $exists: true },
+                        $expr: {
+                            $and: [
+                                { $eq: [{ $month: '$birthDate' }, todayMonth] },
+                                { $eq: [{ $dayOfMonth: '$birthDate' }, todayDay] }
+                            ]
+                        }
+                    }).select('displayName profilePicture clubsJoined');
+
+                    // Filter for shared clubs (excluding self)
+                    return birthdayUsers.filter(u => {
+                        if (u._id.toString() === userId.toString()) return false;
+                        const userClubIds = u.clubsJoined.map(c => (c.clubId?._id || c.clubId).toString());
+                        return userClubIds.some(cid => clubIds.includes(cid));
+                    }).map(u => ({
+                        _id: u._id,
+                        displayName: u.displayName,
+                        profilePicture: u.profilePicture
+                    }));
+                })()
             }
         });
     } catch (error) {
