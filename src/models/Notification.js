@@ -25,7 +25,9 @@ const notificationSchema = new mongoose.Schema({
             'new_message',
             'member_joined',
             'member_removed',
-            'attendance_marked'
+            'attendance_marked',
+            'gallery_upload',
+            'gallery_approved'
         ]
     },
     title: {
@@ -48,7 +50,7 @@ const notificationSchema = new mongoose.Schema({
     },
     relatedModel: {
         type: String,
-        enum: ['Task', 'Meeting', 'Club', 'User', 'Message']
+        enum: ['Task', 'Meeting', 'Club', 'User', 'Message', 'Gallery']
     },
     read: {
         type: Boolean,

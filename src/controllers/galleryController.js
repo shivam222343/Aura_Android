@@ -1,5 +1,9 @@
+const mongoose = require('mongoose');
 const Gallery = require('../models/Gallery');
 const Club = require('../models/Club');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
+const { sendPushNotification, sendPushNotificationToMany } = require('../utils/notifications');
 const { uploadImageBuffer: uploadToCloudinary } = require('../config/cloudinary');
 
 /**
@@ -38,6 +42,31 @@ exports.uploadImage = async (req, res) => {
             data: newImage,
             message: 'Image uploaded successfully. Waiting for admin approval.'
         });
+
+        // Notify Admins
+        try {
+            const admins = await User.find({ role: 'admin' }).select('_id');
+            const adminIds = admins.map(a => a._id);
+
+            if (adminIds.length > 0) {
+                const adminNotifs = adminIds.map(adminId => ({
+                    userId: adminId,
+                    type: 'gallery_upload',
+                    title: 'New Gallery Upload',
+                    message: `${req.user.displayName} uploaded a new image for approval.`,
+                    relatedId: newImage._id,
+                    relatedModel: 'Gallery'
+                }));
+                await Notification.insertMany(adminNotifs);
+                await sendPushNotificationToMany(adminIds, {
+                    title: 'New Gallery Upload 📸',
+                    body: `${req.user.displayName} just uploaded a new image. Check it for approval!`,
+                    data: { imageId: newImage._id.toString() }
+                });
+            }
+        } catch (notifError) {
+            console.error('Error sending admin notifications:', notifError);
+        }
     } catch (error) {
         console.error('Gallery upload error:', error);
         res.status(400).json({
@@ -54,8 +83,13 @@ exports.uploadImage = async (req, res) => {
  */
 exports.getGalleryImages = async (req, res) => {
     try {
-        const { category, clubId } = req.query;
+        const { category, clubId, status } = req.query;
         let query = { status: 'approved' };
+
+        // If status is provided and user is admin, allow filtering by status
+        if (status && (req.user?.role === 'admin' || req.user?.role === 'subadmin')) {
+            query.status = status;
+        }
 
         if (category && category !== 'all') query.category = category;
         if (clubId) query.clubId = clubId;
@@ -95,6 +129,46 @@ exports.updateImageStatus = async (req, res) => {
             success: true,
             data: image
         });
+
+        // If approved, notify all users
+        if (status === 'approved') {
+            try {
+                // Find all users with push tokens
+                const users = await User.find({ _id: { $ne: image.uploadedBy } }).select('_id');
+                const userIds = users.map(u => u._id);
+
+                if (userIds.length > 0) {
+                    // We don't want to flood the Notification collection with thousands of "New Gallery Item" for every user
+                    // maybe just push notification? Or maybe just for active users?
+                    // User requested "show new img notification to all users".
+                    // I'll do push only for everyone, and DB notif only for the uploader (to say your image is live)
+
+                    // Notify uploader
+                    const uploaderNotif = await Notification.create({
+                        userId: image.uploadedBy,
+                        type: 'gallery_approved',
+                        title: 'Image Approved! 🎉',
+                        message: `Your image "${image.title || 'Untitled'}" is now live in the gallery.`,
+                        relatedId: image._id,
+                        relatedModel: 'Gallery'
+                    });
+                    await sendPushNotification(image.uploadedBy, {
+                        title: 'Image Approved! 🎉',
+                        body: `Your image is now live in the gallery.`,
+                        data: { imageId: image._id.toString() }
+                    });
+
+                    // Broad push notification to others
+                    await sendPushNotificationToMany(userIds, {
+                        title: 'New Gallery Photo 📸',
+                        body: 'Someone just shared a new moment in the gallery. Check it out!',
+                        data: { imageId: image._id.toString() }
+                    });
+                }
+            } catch (notifError) {
+                console.error('Error sending approval notifications:', notifError);
+            }
+        }
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error' });
     }

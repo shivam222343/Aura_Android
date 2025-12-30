@@ -12,7 +12,7 @@ const { protect, authorize } = require('../middleware/auth');
 const { uploadImage: uploadMiddleware } = require('../middleware/upload');
 
 router.route('/')
-    .get(getGalleryImages)
+    .get(protect, getGalleryImages)
     .post(protect, uploadMiddleware.single('image'), uploadImage);
 
 router.put('/:id/status', protect, authorize('admin'), updateImageStatus);
