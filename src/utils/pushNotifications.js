@@ -14,6 +14,7 @@ exports.sendPushNotification = async (userId, notification) => {
         const title = notification.title;
         const body = notification.body || notification.message;
         const data = notification.data || {};
+        const categoryIdentifier = notification.categoryIdentifier;
 
         const user = await User.findById(userId).select('fcmToken');
 
@@ -35,6 +36,7 @@ exports.sendPushNotification = async (userId, notification) => {
             data: data,
             priority: 'high',
             channelId: 'default',
+            categoryId: categoryIdentifier,
             _displayInForeground: true,
         };
 

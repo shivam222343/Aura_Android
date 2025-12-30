@@ -102,7 +102,8 @@ exports.sendMessage = async (req, res) => {
             data: {
                 screen: 'Chat',
                 params: { otherUser: { _id: senderId, displayName: populatedMessage.senderId.displayName } }
-            }
+            },
+            categoryIdentifier: 'chat-reply'
         });
 
         // Handle AI mention asynchronously
