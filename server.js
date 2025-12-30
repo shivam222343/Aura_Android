@@ -34,8 +34,8 @@ app.use(cors({
     origin: true, // Allow any origin
     credentials: true
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // Rate limiting
 const limiter = rateLimit({
