@@ -322,12 +322,15 @@ exports.getConversations = async (req, res) => {
             // Skip if otherUser is null or undefined
             if (!otherUser || !otherUser._id) return;
 
+            const otherUserId = otherUser._id.toString();
+
+            // Skip self-chat
+            if (otherUserId === userId.toString()) return;
+
             // Filter: Only show users who share at least one club
             const otherUserClubIds = (otherUser.clubsJoined || []).map(c => c.clubId.toString());
             const sharesClub = otherUserClubIds.some(id => userClubIds.includes(id));
             if (!sharesClub) return;
-
-            const otherUserId = otherUser._id.toString();
 
             if (!conversations.has(otherUserId)) {
                 conversations.set(otherUserId, {
