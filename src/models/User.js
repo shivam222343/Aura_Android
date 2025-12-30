@@ -30,6 +30,21 @@ const userSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    fullName: {
+        type: String,
+        trim: true
+    },
+    birthDate: {
+        type: Date
+    },
+    branch: {
+        type: String,
+        trim: true
+    },
+    passoutYear: {
+        type: String,
+        trim: true
+    },
     profilePicture: {
         url: String,
         publicId: String

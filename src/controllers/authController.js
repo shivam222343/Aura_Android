@@ -175,13 +175,19 @@ exports.getMe = async (req, res) => {
  */
 exports.updateProfile = async (req, res) => {
     try {
-        const { displayName, phoneNumber, preferences } = req.body;
+        const { displayName, phoneNumber, preferences, fullName, birthDate, branch, passoutYear } = req.body;
 
         const user = await User.findById(req.user._id);
 
         if (displayName) user.displayName = displayName;
         if (phoneNumber) user.phoneNumber = phoneNumber;
         if (preferences) user.preferences = { ...user.preferences, ...preferences };
+
+        // New profile fields
+        if (fullName) user.fullName = fullName;
+        if (birthDate) user.birthDate = new Date(birthDate);
+        if (branch) user.branch = branch;
+        if (passoutYear) user.passoutYear = passoutYear;
 
         await user.save();
 
