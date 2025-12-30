@@ -81,15 +81,23 @@ exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) =>
  */
 exports.handleAIMention = async (senderId, receiverId, conversationMessages, mentionedMessage) => {
     try {
+        console.log(`[AI] Handling mention from ${senderId} in conversation with ${receiverId}`);
+
         // Get AI response
-        const conversationId = [senderId, receiverId].sort().join('-');
+        const conversationId = [senderId.toString(), receiverId.toString()].sort().join('-');
         const aiResponse = await exports.getAIResponse(
             conversationId,
             mentionedMessage.content,
             conversationMessages
         );
 
+        if (!aiResponse) {
+            console.error('[AI] Failed to get AI response');
+            return null;
+        }
+
         // Create AI message
+        console.log('[AI] Creating message in database...');
         const aiMessage = await Message.create({
             senderId: '000000000000000000000000', // Special valid ObjectId for AI
             receiverId: senderId,
@@ -102,9 +110,11 @@ exports.handleAIMention = async (senderId, receiverId, conversationMessages, men
         const populatedMessage = await Message.findById(aiMessage._id)
             .populate('replyTo');
 
+        console.log(`[AI] AI message created and populated: ${aiMessage._id}`);
         return populatedMessage;
     } catch (error) {
         console.error('Error handling AI mention:', error);
+        console.error('Error stack:', error.stack);
         return null;
     }
 };
