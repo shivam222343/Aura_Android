@@ -117,6 +117,8 @@ const { sendPushNotificationToMany, sendClubPushNotification } = require('../uti
  * @route   POST /api/admin/send-notification
  * @access  Admin
  */
+const mongoose = require('mongoose');
+
 exports.sendCustomNotification = async (req, res) => {
     try {
         const { title, message, clubId, priority } = req.body;
@@ -130,18 +132,29 @@ exports.sendCustomNotification = async (req, res) => {
             type: 'admin_custom_notification',
             title,
             message,
-            priority: priority || 'medium',
+            priority: priority || 'high',
             data: { custom: true }
         };
 
         if (clubId && clubId !== 'all') {
             // Club specific
-            const users = await User.find({ 'clubsJoined.clubId': clubId }).select('_id');
+            const cid = new mongoose.Types.ObjectId(clubId);
+            const users = await User.find({
+                'clubsJoined.clubId': cid
+            }).select('_id fcmToken');
+
             targetUsers = users.map(u => u._id);
             notificationData.clubId = clubId;
 
-            // Send Push
-            await sendClubPushNotification(clubId, title, message, { type: 'admin_custom' });
+            // Only send push to those with tokens
+            const usersWithTokens = users.filter(u => u.fcmToken).map(u => u._id);
+            if (usersWithTokens.length > 0) {
+                await sendPushNotificationToMany(usersWithTokens, {
+                    title,
+                    body: message,
+                    data: { type: 'admin_custom', clubId }
+                });
+            }
         } else {
             // All users
             const users = await User.find().select('_id');

@@ -1,5 +1,6 @@
 const { Expo } = require('expo-server-sdk');
 const User = require('../models/User');
+const mongoose = require('mongoose');
 
 const expo = new Expo();
 
@@ -32,6 +33,8 @@ exports.sendPushNotification = async (userId, notification) => {
             title: title,
             body: body,
             data: data,
+            priority: 'high',
+            channelId: 'default',
             _displayInForeground: true,
         };
 
@@ -57,7 +60,8 @@ exports.sendPushNotification = async (userId, notification) => {
  */
 exports.sendClubPushNotification = async (clubId, title, body, data = {}) => {
     try {
-        const query = { 'clubsJoined.clubId': clubId };
+        const cid = typeof clubId === 'string' ? new mongoose.Types.ObjectId(clubId) : clubId;
+        const query = { 'clubsJoined.clubId': cid };
         if (data.senderId) {
             query._id = { $ne: data.senderId };
         }
@@ -117,6 +121,8 @@ exports.sendPushNotificationToMany = async (userIds, notification) => {
                     title: title,
                     body: body,
                     data: data,
+                    priority: 'high',
+                    channelId: 'default',
                 });
             }
         }
