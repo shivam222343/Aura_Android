@@ -280,12 +280,12 @@ exports.getConversations = async (req, res) => {
             deletedFor: { $ne: userId }
         })
             .sort({ createdAt: -1 })
-            .populate('senderId', 'displayName profilePicture isOnline lastSeen')
-            .populate('receiverId', 'displayName profilePicture isOnline lastSeen');
+            .populate('senderId', 'displayName profilePicture isOnline lastSeen clubsJoined')
+            .populate('receiverId', 'displayName profilePicture isOnline lastSeen clubsJoined');
 
         const conversations = new Map();
 
-        const userClubIds = req.user.clubsJoined.map(c => c.clubId.toString());
+        const userClubIds = (req.user.clubsJoined || []).map(c => c.clubId.toString());
 
         messages.forEach(msg => {
             // Skip if sender or receiver is not populated properly
@@ -297,7 +297,7 @@ exports.getConversations = async (req, res) => {
             if (!otherUser || !otherUser._id) return;
 
             // Filter: Only show users who share at least one club
-            const otherUserClubIds = otherUser.clubsJoined.map(c => c.clubId.toString());
+            const otherUserClubIds = (otherUser.clubsJoined || []).map(c => c.clubId.toString());
             const sharesClub = otherUserClubIds.some(id => userClubIds.includes(id));
             if (!sharesClub) return;
 
