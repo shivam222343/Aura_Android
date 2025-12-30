@@ -313,9 +313,12 @@ exports.getConversations = async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching conversations:', error);
+        console.error('Error stack:', error.stack);
+        console.error('User ID:', req.user?._id);
         res.status(500).json({
             success: false,
-            message: 'Error fetching conversations'
+            message: 'Error fetching conversations',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
