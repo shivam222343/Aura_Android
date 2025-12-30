@@ -13,6 +13,16 @@ const { uploadImageBuffer: uploadToCloudinary } = require('../config/cloudinary'
  */
 exports.uploadImage = async (req, res) => {
     try {
+        console.log('Incoming Gallery Upload:', {
+            body: req.body,
+            file: req.file ? {
+                fieldname: req.file.fieldname,
+                originalname: req.file.originalname,
+                mimetype: req.file.mimetype,
+                size: req.file.size
+            } : 'No file'
+        });
+
         const { title, description, clubId, category, tags } = req.body;
 
         if (!req.file) {
@@ -270,6 +280,66 @@ exports.getLikedUsers = async (req, res) => {
             data: image.likes
         });
     } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+/**
+ * @desc    Update image details (title, description, category)
+ * @route   PUT /api/gallery/:id
+ * @access  Private
+ */
+exports.updateImage = async (req, res) => {
+    try {
+        let image = await Gallery.findById(req.params.id);
+        if (!image) return res.status(404).json({ success: false, message: 'Image not found' });
+
+        // Check ownership or admin
+        if (image.uploadedBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Not authorized to update this image' });
+        }
+
+        const { title, description, category, clubId } = req.body;
+
+        image.title = title || image.title;
+        image.description = description || image.description;
+        image.category = category || image.category;
+        image.clubId = clubId || image.clubId;
+
+        await image.save();
+
+        res.status(200).json({ success: true, data: image });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+/**
+ * @desc    Delete image
+ * @route   DELETE /api/gallery/:id
+ * @access  Private
+ */
+exports.deleteImage = async (req, res) => {
+    try {
+        const image = await Gallery.findById(req.params.id);
+        if (!image) return res.status(404).json({ success: false, message: 'Image not found' });
+
+        // Check ownership or admin
+        if (image.uploadedBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Not authorized to delete this image' });
+        }
+
+        // Delete from Cloudinary if publicId exists
+        if (image.publicId) {
+            const cloudinary = require('cloudinary').v2;
+            await cloudinary.uploader.destroy(image.publicId);
+        }
+
+        await image.deleteOne();
+
+        res.status(200).json({ success: true, message: 'Image removed' });
+    } catch (error) {
+        console.error('Delete image error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };

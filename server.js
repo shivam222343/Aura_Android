@@ -6,6 +6,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const morgan = require('morgan');
 const connectDB = require('./src/config/database');
 const { sendPushNotification } = require('./src/utils/pushNotifications');
 
@@ -27,6 +28,7 @@ connectDB();
 
 // Middleware
 app.use(helmet()); // Security headers
+app.use(morgan('dev'));
 app.use(compression()); // Compress responses
 app.use(cors({
     origin: true, // Allow any origin
@@ -66,6 +68,7 @@ app.use('/api/messages', require('./src/routes/messages'));
 app.use('/api/gallery', require('./src/routes/gallery'));
 app.use('/api/snaps', require('./src/routes/snaps'));
 app.use('/api/admin', require('./src/routes/admin'));
+app.use('/api/analytics', require('./src/routes/analytics'));
 
 // Socket.io connection handling
 io.on('connection', (socket) => {

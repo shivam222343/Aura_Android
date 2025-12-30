@@ -19,11 +19,19 @@ const taskSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
-    assignedTo: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: [true, 'Assigned user is required']
-    },
+    assignedTo: [{
+        user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User',
+            required: true
+        },
+        status: {
+            type: String,
+            enum: ['pending', 'completed', 'not-completed'],
+            default: 'pending'
+        },
+        completedAt: Date
+    }],
     assignedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',

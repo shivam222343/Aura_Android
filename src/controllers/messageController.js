@@ -286,7 +286,14 @@ exports.getConversations = async (req, res) => {
         const conversations = new Map();
 
         messages.forEach(msg => {
+            // Skip if sender or receiver is not populated properly
+            if (!msg.senderId || !msg.receiverId) return;
+
             const otherUser = msg.senderId._id.toString() === userId.toString() ? msg.receiverId : msg.senderId;
+
+            // Skip if otherUser is null or undefined
+            if (!otherUser || !otherUser._id) return;
+
             const otherUserId = otherUser._id.toString();
 
             if (!conversations.has(otherUserId)) {

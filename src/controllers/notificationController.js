@@ -71,3 +71,24 @@ exports.clearAll = async (req, res) => {
         });
     }
 };
+// @desc    Mark all notifications as read
+// @route   PUT /api/notifications/read-all
+// @access  Private
+exports.markAllAsRead = async (req, res) => {
+    try {
+        await Notification.updateMany(
+            { userId: req.user._id, read: false },
+            { read: true, readAt: new Date() }
+        );
+
+        res.json({
+            success: true,
+            message: 'All notifications marked as read'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error updating notifications'
+        });
+    }
+};
