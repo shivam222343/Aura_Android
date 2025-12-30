@@ -1,6 +1,6 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
-const { sendPushNotification } = require('../utils/notifications');
+const { sendPushNotification } = require('../utils/pushNotifications');
 
 /**
  * @desc    Get messages for a conversation
@@ -44,8 +44,24 @@ exports.getMessages = async (req, res) => {
  */
 exports.sendMessage = async (req, res) => {
     try {
-        const { receiverId, content, type, fileUrl, clubId, replyTo, mentionAI, forwarded, isForwarded } = req.body;
-        const senderId = req.user._id;
+        // Enforce club membership check: Users must share at least one club
+        if (receiverId) {
+            const receiver = await User.findById(receiverId);
+            if (!receiver) {
+                return res.status(404).json({ success: false, message: 'Receiver not found' });
+            }
+
+            const senderClubs = (req.user.clubsJoined || []).map(c => c.clubId.toString());
+            const receiverClubs = (receiver.clubsJoined || []).map(c => c.clubId.toString());
+            const shareClub = senderClubs.some(id => receiverClubs.includes(id));
+
+            if (!shareClub && req.user.role !== 'admin') {
+                return res.status(403).json({
+                    success: false,
+                    message: "Access Denied: You can only message members of clubs you've joined."
+                });
+            }
+        }
 
         const newMessage = await Message.create({
             senderId,

@@ -164,6 +164,64 @@ exports.getClubSnaps = async (req, res) => {
 };
 
 /**
+ * @desc    Get active snaps from all clubs user has joined
+ * @route   GET /api/snaps/my-clubs
+ * @access  Private
+ */
+exports.getMySnaps = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const now = new Date();
+
+        // Get all club IDs user has joined
+        const userClubIds = req.user.clubsJoined.map(c => c.clubId);
+
+        if (!userClubIds || userClubIds.length === 0) {
+            return res.status(200).json({ success: true, data: [] });
+        }
+
+        // Find snaps in any of these clubs
+        const snaps = await Snap.find({
+            clubId: { $in: userClubIds },
+            expiresAt: { $gt: now },
+            deleted: { $ne: true },
+            $or: [
+                { recipients: { $exists: false } },
+                { recipients: { $size: 0 } },
+                { recipients: userId },
+                { senderId: userId }
+            ]
+        })
+            .sort({ createdAt: -1 })
+            .populate('senderId', 'displayName profilePicture');
+
+        // Group by user
+        const userSnaps = new Map();
+        snaps.forEach(snap => {
+            const snapSenderId = snap.senderId._id.toString();
+            if (!userSnaps.has(snapSenderId)) {
+                userSnaps.set(snapSenderId, {
+                    user: snap.senderId,
+                    snaps: []
+                });
+            }
+            userSnaps.get(snapSenderId).snaps.push(snap);
+        });
+
+        res.status(200).json({
+            success: true,
+            data: Array.from(userSnaps.values())
+        });
+    } catch (error) {
+        console.error('Error fetching my snaps:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching snaps'
+        });
+    }
+};
+
+/**
  * @desc    Mark snap as viewed
  * @route   POST /api/snaps/:snapId/view
  * @access  Private

@@ -1,18 +1,19 @@
 const { Expo } = require('expo-server-sdk');
 const User = require('../models/User');
 
-// Create a new Expo SDK client
 const expo = new Expo();
 
 /**
  * Send push notification to a specific user
  * @param {string} userId - ID of the user to notify
- * @param {string} title - Title of the notification
- * @param {string} body - Body of the notification
- * @param {object} data - Additional data to send
+ * @param {object} notification - { title, body, data }
  */
-exports.sendPushNotification = async (userId, title, body, data = {}) => {
+exports.sendPushNotification = async (userId, notification) => {
     try {
+        const title = notification.title;
+        const body = notification.body || notification.message;
+        const data = notification.data || {};
+
         const user = await User.findById(userId).select('fcmToken');
 
         if (!user || !user.fcmToken) {
@@ -20,29 +21,24 @@ exports.sendPushNotification = async (userId, title, body, data = {}) => {
             return;
         }
 
-        // Check that all your push tokens appear to be valid Expo push tokens
         if (!Expo.isExpoPushToken(user.fcmToken)) {
             console.error(`Push token ${user.fcmToken} is not a valid Expo push token`);
             return;
         }
 
-        // Create the messages that you want to send to clients
         const message = {
             to: user.fcmToken,
             sound: 'default',
             title: title,
             body: body,
             data: data,
-            _displayInForeground: true, // Show even if app is open
+            _displayInForeground: true,
         };
 
         const chunks = expo.chunkPushNotifications([message]);
-        const tickets = [];
-
         for (let chunk of chunks) {
             try {
-                let ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-                tickets.push(...ticketChunk);
+                await expo.sendPushNotificationsAsync(chunk);
             } catch (error) {
                 console.error('Error sending push notification chunk:', error);
             }
@@ -57,15 +53,15 @@ exports.sendPushNotification = async (userId, title, body, data = {}) => {
  * @param {string} clubId - ID of the club
  * @param {string} title - Title
  * @param {string} body - Body
- * @param {object} data - Data
+ * @param {object} data - Data (includes senderId to avoid self-notifying)
  */
 exports.sendClubPushNotification = async (clubId, title, body, data = {}) => {
     try {
-        // Find users who have this clubId in their clubsJoined, excluding the sender if provided
         const query = { 'clubsJoined.clubId': clubId };
         if (data.senderId) {
             query._id = { $ne: data.senderId };
         }
+
         const users = await User.find(query).select('fcmToken');
 
         const messages = [];
@@ -81,6 +77,8 @@ exports.sendClubPushNotification = async (clubId, title, body, data = {}) => {
             }
         }
 
+        if (messages.length === 0) return;
+
         const chunks = expo.chunkPushNotifications(messages);
         for (let chunk of chunks) {
             try {
@@ -91,5 +89,14 @@ exports.sendClubPushNotification = async (clubId, title, body, data = {}) => {
         }
     } catch (error) {
         console.error('Error in sendClubPushNotification:', error);
+    }
+};
+
+/**
+ * Compatibility wrapper for sendPushNotificationToMany
+ */
+exports.sendPushNotificationToMany = async (userIds, notification) => {
+    for (const userId of userIds) {
+        await exports.sendPushNotification(userId, notification);
     }
 };

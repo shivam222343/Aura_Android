@@ -5,6 +5,7 @@ const { uploadImage, handleMulterError } = require('../middleware/upload');
 const {
     uploadSnap,
     getClubSnaps,
+    getMySnaps,
     viewSnap,
     deleteSnap,
     getSnapViewers,
@@ -14,6 +15,7 @@ const {
 router.use(protect);
 
 router.post('/', uploadImage.single('image'), handleMulterError, uploadSnap);
+router.get('/my-clubs', getMySnaps);
 router.get('/club/:clubId', getClubSnaps);
 router.post('/:snapId/view', viewSnap);
 router.delete('/:snapId', deleteSnap);

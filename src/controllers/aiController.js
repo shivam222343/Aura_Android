@@ -57,15 +57,18 @@ exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) =>
         // Call Groq API
         const completion = await groq.chat.completions.create({
             messages: messages,
-            model: 'llama-3.1-70b-versatile',
+            model: 'llama-3.3-70b-versatile',
             temperature: 0.7,
             max_tokens: 150, // Keep responses short
             top_p: 1,
         });
 
-        return completion.choices[0]?.message?.content || "I'm here to help! Could you rephrase that?";
+        const responseText = completion.choices[0]?.message?.content;
+        console.log(`[AI] Response: "${responseText?.substring(0, 50)}..."`);
+
+        return responseText || "I'm here to help! Could you rephrase that?";
     } catch (error) {
-        console.error('Groq AI Error:', error.message, error.response?.data || '');
+        console.error('Groq AI Error:', error.message);
         return "Sorry, I'm having trouble responding right now. Please try again!";
     }
 };
