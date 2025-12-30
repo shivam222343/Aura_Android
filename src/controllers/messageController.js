@@ -95,16 +95,22 @@ exports.sendMessage = async (req, res) => {
             data: populatedMessage
         });
 
-        // Send Push Notification
-        sendPushNotification(receiverId, {
-            title: populatedMessage.senderId.displayName,
-            body: type === 'text' ? content : 'Sent an attachment',
-            data: {
-                screen: 'Chat',
-                params: { otherUser: { _id: senderId, displayName: populatedMessage.senderId.displayName } }
-            },
-            categoryIdentifier: 'chat-reply'
-        });
+        // Check if receiver is online via socket to avoid redundant push notifications
+        const receiverRoom = io.sockets.adapter.rooms.get(receiverId.toString());
+        const isReceiverOnline = receiverRoom && receiverRoom.size > 0;
+
+        if (!isReceiverOnline) {
+            // Send Push Notification
+            sendPushNotification(receiverId, {
+                title: populatedMessage.senderId.displayName,
+                body: type === 'text' ? content : 'Sent an attachment',
+                data: {
+                    screen: 'Chat',
+                    params: { otherUser: { _id: senderId, displayName: populatedMessage.senderId.displayName } }
+                },
+                categoryIdentifier: 'chat-reply'
+            });
+        }
 
         // Handle AI mention asynchronously
         if (mentionAI && content.includes('@Eta')) {
