@@ -44,6 +44,9 @@ exports.getMessages = async (req, res) => {
  */
 exports.sendMessage = async (req, res) => {
     try {
+        const { receiverId, content, type, fileUrl, clubId, replyTo, mentionAI, forwarded, isForwarded } = req.body;
+        const senderId = req.user._id;
+
         // Enforce club membership check: Users must share at least one club
         if (receiverId) {
             const receiver = await User.findById(receiverId);

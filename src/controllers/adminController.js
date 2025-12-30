@@ -109,3 +109,67 @@ exports.changeUserRole = async (req, res) => {
         });
     }
 };
+const Notification = require('../models/Notification');
+const { sendPushNotificationToMany, sendClubPushNotification } = require('../utils/pushNotifications');
+
+/**
+ * @desc    Send custom notification to users or clubs
+ * @route   POST /api/admin/send-notification
+ * @access  Admin
+ */
+exports.sendCustomNotification = async (req, res) => {
+    try {
+        const { title, message, clubId, priority } = req.body;
+
+        if (!title || !message) {
+            return res.status(400).json({ success: false, message: 'Title and message are required' });
+        }
+
+        let targetUsers = [];
+        const notificationData = {
+            type: 'admin_custom_notification',
+            title,
+            message,
+            priority: priority || 'medium',
+            data: { custom: true }
+        };
+
+        if (clubId && clubId !== 'all') {
+            // Club specific
+            const users = await User.find({ 'clubsJoined.clubId': clubId }).select('_id');
+            targetUsers = users.map(u => u._id);
+            notificationData.clubId = clubId;
+
+            // Send Push
+            await sendClubPushNotification(clubId, title, message, { type: 'admin_custom' });
+        } else {
+            // All users
+            const users = await User.find().select('_id');
+            targetUsers = users.map(u => u._id);
+
+            // Send Push to all (chunked)
+            const allUsersWithToken = await User.find({ fcmToken: { $exists: true } }).select('_id');
+            const allIds = allUsersWithToken.map(u => u._id);
+            await sendPushNotificationToMany(allIds, { title, body: message, data: { type: 'admin_custom' } });
+        }
+
+        // Save in-app notifications for all target users
+        const notifications = targetUsers.map(userId => ({
+            ...notificationData,
+            userId
+        }));
+
+        await Notification.insertMany(notifications);
+
+        res.status(200).json({
+            success: true,
+            message: `Notification sent to ${targetUsers.length} users`
+        });
+    } catch (error) {
+        console.error('Send custom notification error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error sending notification'
+        });
+    }
+};

@@ -27,7 +27,8 @@ const notificationSchema = new mongoose.Schema({
             'member_removed',
             'attendance_marked',
             'gallery_upload',
-            'gallery_approved'
+            'gallery_approved',
+            'admin_custom_notification'
         ]
     },
     title: {

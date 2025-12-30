@@ -93,10 +93,45 @@ exports.sendClubPushNotification = async (clubId, title, body, data = {}) => {
 };
 
 /**
- * Compatibility wrapper for sendPushNotificationToMany
+ * Send push notification to multiple users efficiently
+ * @param {string[]} userIds - Array of user IDs
+ * @param {object} notification - { title, body, data }
  */
 exports.sendPushNotificationToMany = async (userIds, notification) => {
-    for (const userId of userIds) {
-        await exports.sendPushNotification(userId, notification);
+    try {
+        const title = notification.title;
+        const body = notification.body || notification.message;
+        const data = notification.data || {};
+
+        const users = await User.find({
+            _id: { $in: userIds },
+            fcmToken: { $exists: true }
+        }).select('fcmToken');
+
+        const messages = [];
+        for (let user of users) {
+            if (user.fcmToken && Expo.isExpoPushToken(user.fcmToken)) {
+                messages.push({
+                    to: user.fcmToken,
+                    sound: 'default',
+                    title: title,
+                    body: body,
+                    data: data,
+                });
+            }
+        }
+
+        if (messages.length === 0) return;
+
+        const chunks = expo.chunkPushNotifications(messages);
+        for (let chunk of chunks) {
+            try {
+                await expo.sendPushNotificationsAsync(chunk);
+            } catch (error) {
+                console.error('Error sending batch push notification chunk:', error);
+            }
+        }
+    } catch (error) {
+        console.error('Error in sendPushNotificationToMany:', error);
     }
 };

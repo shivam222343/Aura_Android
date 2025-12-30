@@ -263,6 +263,16 @@ exports.removeMemberFromClub = async (req, res) => {
  */
 exports.deleteClub = async (req, res) => {
     try {
+        const { superKey } = req.body;
+        const validKey = process.env.ADMIN_SUPER_KEY || 'MavericksSuperKey';
+
+        if (superKey !== validKey) {
+            return res.status(403).json({
+                success: false,
+                message: 'Invalid Super Key. Access Denied.'
+            });
+        }
+
         const club = await Club.findById(req.params.id);
 
         if (!club) {
