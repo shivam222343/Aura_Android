@@ -1,130 +1,114 @@
-const { Expo } = require('expo-server-sdk');
+const admin = require('firebase-admin');
+const path = require('path');
+const fs = require('fs');
 
-// Create a new Expo SDK client
-const expo = new Expo();
+// Initialize Firebase Admin
+try {
+    let serviceAccount;
+
+    // 1. Try Environment Variable (Best for deployment)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        try {
+            serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+            console.log('🔥 Using Firebase Config from Environment Variable');
+        } catch (e) {
+            console.error('❌ Failed to parse FIREBASE_SERVICE_ACCOUNT env var');
+        }
+    }
+
+    // 2. Try Local File (Best for local dev)
+    if (!serviceAccount) {
+        const serviceAccountPath = path.join(__dirname, '../../serviceAccountKey.json');
+        if (fs.existsSync(serviceAccountPath)) {
+            serviceAccount = require(serviceAccountPath);
+            console.log('🔥 Using Firebase Config from serviceAccountKey.json');
+        }
+    }
+
+    if (serviceAccount) {
+        if (!admin.apps.length) {
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount)
+            });
+            console.log('🔥 Firebase Admin Initialized');
+        }
+    } else {
+        console.warn('⚠️ No Firebase credentials found (ENV or File). Notifications will fail.');
+    }
+} catch (error) {
+    console.error('⚠️ Failed to initialize Firebase Admin:', error.message);
+}
 
 /**
  * Send push notification to a single device
- * @param {string} pushToken - Expo push token
+ * @param {string} pushToken - FCM registration token
  * @param {object} options - Notification options
  * @param {string} options.title - Notification title
  * @param {string} options.body - Notification body
  * @param {object} options.data - Additional data
- * @returns {Promise} - Expo push ticket
+ * @returns {Promise} - Firebase messaging response
  */
 const sendPushNotification = async (pushToken, { title, body, data = {} }) => {
-    // Check if the push token is valid
-    if (!Expo.isExpoPushToken(pushToken)) {
-        console.error(`❌ Invalid push token: ${pushToken}`);
+    if (!admin.apps.length) {
+        console.error('❌ Firebase Admin not initialized');
         return null;
     }
 
-    // Construct the notification message
-    const message = {
-        to: pushToken,
-        sound: 'default',
-        title,
-        body,
-        data,
-        priority: 'high',
-        badge: 1,
-    };
+    if (!pushToken) {
+        console.error('❌ Missing push token');
+        return null;
+    }
 
     try {
-        // Send the notification
-        const tickets = await expo.sendPushNotificationsAsync([message]);
+        const message = {
+            notification: {
+                title: title,
+                body: body,
+            },
+            data: data, // data must be map of strings
+            token: pushToken
+        };
 
-        // Check for errors
-        if (tickets[0].status === 'error') {
-            console.error('❌ Push notification error:', tickets[0].message);
-            return null;
-        }
-
-        console.log('✅ Push notification sent successfully');
-        return tickets[0];
+        const response = await admin.messaging().send(message);
+        console.log('✅ Push notification sent:', response);
+        return response;
     } catch (error) {
         console.error('❌ Failed to send push notification:', error);
-        throw error;
+        return null; // Return null so caller doesn't crash
     }
 };
 
 /**
  * Send push notifications to multiple devices
  * @param {Array} notifications - Array of {pushToken, title, body, data}
- * @returns {Promise} - Array of Expo push tickets
+ * @returns {Promise} - Array of responses
  */
 const sendBulkPushNotifications = async (notifications) => {
-    const messages = [];
+    if (!admin.apps.length) return [];
 
+    const responses = [];
     for (const notif of notifications) {
-        if (Expo.isExpoPushToken(notif.pushToken)) {
-            messages.push({
-                to: notif.pushToken,
-                sound: 'default',
+        if (notif.pushToken) {
+            const res = await sendPushNotification(notif.pushToken, {
                 title: notif.title,
                 body: notif.body,
-                data: notif.data || {},
-                priority: 'high',
-                badge: 1,
+                data: notif.data
             });
+            responses.push(res);
         }
     }
-
-    // Expo recommends sending notifications in chunks of 100
-    const chunks = expo.chunkPushNotifications(messages);
-    const tickets = [];
-
-    try {
-        for (const chunk of chunks) {
-            const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-            tickets.push(...ticketChunk);
-        }
-
-        console.log(`✅ Sent ${tickets.length} push notifications`);
-        return tickets;
-    } catch (error) {
-        console.error('❌ Failed to send bulk push notifications:', error);
-        throw error;
-    }
+    return responses;
 };
 
 /**
  * Handle push notification receipts
- * @param {Array} tickets - Array of Expo push tickets
+ * NOTE: FCM doesn't have an async receipt fetching mechanism like Expo.
+ * Delivery is confirmed in the send response or via FCM data export.
+ * This function is kept for compatibility but does nothing.
  */
 const handlePushReceipts = async (tickets) => {
-    const receiptIds = tickets
-        .filter(ticket => ticket.id)
-        .map(ticket => ticket.id);
-
-    if (receiptIds.length === 0) {
-        return;
-    }
-
-    try {
-        const receiptIdChunks = expo.chunkPushNotificationReceiptIds(receiptIds);
-
-        for (const chunk of receiptIdChunks) {
-            const receipts = await expo.getPushNotificationReceiptsAsync(chunk);
-
-            for (const receiptId in receipts) {
-                const receipt = receipts[receiptId];
-
-                if (receipt.status === 'error') {
-                    console.error(`❌ Receipt error for ${receiptId}:`, receipt.message);
-
-                    // Handle specific errors
-                    if (receipt.details && receipt.details.error) {
-                        // The error codes are listed here: 
-                        // https://docs.expo.dev/push-notifications/sending-notifications/#individual-errors
-                        console.error(`Error code: ${receipt.details.error}`);
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error('❌ Failed to handle push receipts:', error);
-    }
+    // Not applicable for FCM direct sending
+    return;
 };
 
 module.exports = {
