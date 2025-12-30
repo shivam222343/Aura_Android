@@ -40,10 +40,10 @@ exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) =>
         const recentHistory = chatHistory.slice(-10);
         recentHistory.forEach(msg => {
             if (msg.content && !msg.deleted) {
-                const role = msg.mentionAI ? 'assistant' : 'user';
+                const role = msg.isAI ? 'assistant' : 'user';
                 messages.push({
                     role: role,
-                    content: msg.content.replace('@Eta', '').trim()
+                    content: msg.content.replace(/@Eta/i, '').trim()
                 });
             }
         });
@@ -51,8 +51,10 @@ exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) =>
         // Add current message
         messages.push({
             role: 'user',
-            content: userMessage.replace('@Eta', '').trim()
+            content: userMessage.replace(/@Eta/i, '').trim()
         });
+
+        console.log(`[AI] Sending ${messages.length} messages to Groq...`);
 
         // Call Groq API
         const completion = await groq.chat.completions.create({
