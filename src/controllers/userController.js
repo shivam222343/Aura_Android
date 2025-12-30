@@ -19,24 +19,40 @@ exports.getBirthdaysToday = async (req, res) => {
         // Get user's club IDs
         const userClubIds = currentUser.clubsJoined.map(c => c.clubId._id.toString());
 
-        // Get today's date (month and day only)
+        // Get today's date (month and day only) - using UTC
         const today = new Date();
-        const todayMonth = today.getMonth() + 1; // 1-12
-        const todayDay = today.getDate(); // 1-31
+        const todayMonth = today.getUTCMonth() + 1; // 1-12
+        const todayDay = today.getUTCDate(); // 1-31
 
-        // Find all users with birthdays today who are in the same clubs
+        console.log(`🎂 Checking birthdays for: ${todayMonth}/${todayDay}`);
+
+        // Find all users with birthdays who are in the same clubs
         const birthdayMembers = await User.find({
             _id: { $ne: req.user._id }, // Exclude current user
             birthDate: { $exists: true, $ne: null },
             'clubsJoined.clubId': { $in: userClubIds }
         }).populate('clubsJoined.clubId');
 
-        // Filter by exact birthday (month and day)
+        console.log(`📋 Found ${birthdayMembers.length} club members with birthDate set`);
+
+        // Filter by exact birthday (month and day only, ignore year)
         const todayBirthdays = birthdayMembers.filter(user => {
             if (!user.birthDate) return false;
+
             const birthDate = new Date(user.birthDate);
-            return birthDate.getMonth() + 1 === todayMonth && birthDate.getDate() === todayDay;
+            const birthMonth = birthDate.getUTCMonth() + 1;
+            const birthDay = birthDate.getUTCDate();
+
+            const isMatch = birthMonth === todayMonth && birthDay === todayDay;
+
+            if (isMatch) {
+                console.log(`🎉 Birthday match: ${user.displayName} - ${birthMonth}/${birthDay}`);
+            }
+
+            return isMatch;
         });
+
+        console.log(`🎂 Total birthdays today: ${todayBirthdays.length}`);
 
         // Format response with club name
         const formattedBirthdays = todayBirthdays.map(user => {
