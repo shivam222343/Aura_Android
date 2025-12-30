@@ -66,7 +66,22 @@ const sendPushNotification = async (pushToken, { title, body, data = {} }) => {
                 body: body,
             },
             data: data, // data must be map of strings
-            token: pushToken
+            token: pushToken,
+            android: {
+                priority: 'high',
+                notification: {
+                    sound: 'default',
+                    channelId: 'default',
+                    clickAction: 'FLUTTER_NOTIFICATION_CLICK', // Standard for many cross-platform setups, but 'default' works for RN too usually.
+                },
+            },
+            apns: {
+                payload: {
+                    aps: {
+                        sound: 'default',
+                    },
+                },
+            },
         };
 
         const response = await admin.messaging().send(message);
