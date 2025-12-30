@@ -1,8 +1,6 @@
-const { Expo } = require('expo-server-sdk');
+const { sendPushNotification, sendBulkPushNotifications } = require('../services/pushNotification');
 const User = require('../models/User');
 const mongoose = require('mongoose');
-
-const expo = new Expo();
 
 /**
  * Send push notification to a specific user
@@ -14,7 +12,6 @@ exports.sendPushNotification = async (userId, notification) => {
         const title = notification.title;
         const body = notification.body || notification.message;
         const data = notification.data || {};
-        const categoryIdentifier = notification.categoryIdentifier;
 
         const user = await User.findById(userId).select('fcmToken');
 
@@ -23,33 +20,16 @@ exports.sendPushNotification = async (userId, notification) => {
             return;
         }
 
-        if (!Expo.isExpoPushToken(user.fcmToken)) {
-            console.error(`Push token ${user.fcmToken} is not a valid Expo push token`);
-            return;
-        }
+        // Native FCM tokens are long strings, no format check needed here
+        // The service handles errors if token is invalid
+        await sendPushNotification(user.fcmToken, {
+            title,
+            body,
+            data
+        });
 
-        const message = {
-            to: user.fcmToken,
-            sound: 'default',
-            title: title,
-            body: body,
-            data: data,
-            priority: 'high',
-            channelId: 'default',
-            categoryId: categoryIdentifier,
-            _displayInForeground: true,
-        };
-
-        const chunks = expo.chunkPushNotifications([message]);
-        for (let chunk of chunks) {
-            try {
-                await expo.sendPushNotificationsAsync(chunk);
-            } catch (error) {
-                console.error('Error sending push notification chunk:', error);
-            }
-        }
     } catch (error) {
-        console.error('Error in sendPushNotification:', error);
+        console.error('Error in only sendPushNotification:', error);
     }
 };
 
@@ -70,28 +50,20 @@ exports.sendClubPushNotification = async (clubId, title, body, data = {}) => {
 
         const users = await User.find(query).select('fcmToken');
 
-        const messages = [];
+        const notifications = [];
         for (let user of users) {
-            if (user.fcmToken && Expo.isExpoPushToken(user.fcmToken)) {
-                messages.push({
-                    to: user.fcmToken,
-                    sound: 'default',
+            if (user.fcmToken) {
+                notifications.push({
+                    pushToken: user.fcmToken,
                     title: title,
                     body: body,
-                    data: data,
+                    data: data
                 });
             }
         }
 
-        if (messages.length === 0) return;
-
-        const chunks = expo.chunkPushNotifications(messages);
-        for (let chunk of chunks) {
-            try {
-                await expo.sendPushNotificationsAsync(chunk);
-            } catch (error) {
-                console.error('Error sending club push notification chunk:', error);
-            }
+        if (notifications.length > 0) {
+            await sendBulkPushNotifications(notifications);
         }
     } catch (error) {
         console.error('Error in sendClubPushNotification:', error);
@@ -114,30 +86,20 @@ exports.sendPushNotificationToMany = async (userIds, notification) => {
             fcmToken: { $exists: true }
         }).select('fcmToken');
 
-        const messages = [];
+        const notifications = [];
         for (let user of users) {
-            if (user.fcmToken && Expo.isExpoPushToken(user.fcmToken)) {
-                messages.push({
-                    to: user.fcmToken,
-                    sound: 'default',
+            if (user.fcmToken) {
+                notifications.push({
+                    pushToken: user.fcmToken,
                     title: title,
                     body: body,
-                    data: data,
-                    priority: 'high',
-                    channelId: 'default',
+                    data: data
                 });
             }
         }
 
-        if (messages.length === 0) return;
-
-        const chunks = expo.chunkPushNotifications(messages);
-        for (let chunk of chunks) {
-            try {
-                await expo.sendPushNotificationsAsync(chunk);
-            } catch (error) {
-                console.error('Error sending batch push notification chunk:', error);
-            }
+        if (notifications.length > 0) {
+            await sendBulkPushNotifications(notifications);
         }
     } catch (error) {
         console.error('Error in sendPushNotificationToMany:', error);
