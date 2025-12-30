@@ -69,6 +69,7 @@ app.use('/api/gallery', require('./src/routes/gallery'));
 app.use('/api/snaps', require('./src/routes/snaps'));
 app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/analytics', require('./src/routes/analytics'));
+app.use('/api/users', require('./src/routes/users'));
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
