@@ -285,6 +285,8 @@ exports.getConversations = async (req, res) => {
 
         const conversations = new Map();
 
+        const userClubIds = req.user.clubsJoined.map(c => c.clubId.toString());
+
         messages.forEach(msg => {
             // Skip if sender or receiver is not populated properly
             if (!msg.senderId || !msg.receiverId) return;
@@ -293,6 +295,11 @@ exports.getConversations = async (req, res) => {
 
             // Skip if otherUser is null or undefined
             if (!otherUser || !otherUser._id) return;
+
+            // Filter: Only show users who share at least one club
+            const otherUserClubIds = otherUser.clubsJoined.map(c => c.clubId.toString());
+            const sharesClub = otherUserClubIds.some(id => userClubIds.includes(id));
+            if (!sharesClub) return;
 
             const otherUserId = otherUser._id.toString();
 

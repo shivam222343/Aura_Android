@@ -181,6 +181,15 @@ exports.getClubMembers = async (req, res) => {
             });
         }
 
+        // Enforce membership check: User must be in the club or be an admin
+        const isMember = req.user.clubsJoined.some(c => c.clubId.toString() === clubId) || req.user.role === 'admin';
+        if (!isMember) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. You must be a member of this club to view its members.'
+            });
+        }
+
         const members = await User.find({ 'clubsJoined.clubId': clubId })
             .select('displayName email maverickId role profilePicture clubsJoined');
 

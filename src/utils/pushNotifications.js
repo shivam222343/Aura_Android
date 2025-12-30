@@ -61,10 +61,12 @@ exports.sendPushNotification = async (userId, title, body, data = {}) => {
  */
 exports.sendClubPushNotification = async (clubId, title, body, data = {}) => {
     try {
-        // Find users who have this clubId in their clubsJoined
-        const users = await User.find({
-            'clubsJoined.clubId': clubId
-        }).select('fcmToken');
+        // Find users who have this clubId in their clubsJoined, excluding the sender if provided
+        const query = { 'clubsJoined.clubId': clubId };
+        if (data.senderId) {
+            query._id = { $ne: data.senderId };
+        }
+        const users = await User.find(query).select('fcmToken');
 
         const messages = [];
         for (let user of users) {

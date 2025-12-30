@@ -119,7 +119,7 @@ exports.createMeeting = async (req, res) => {
             clubId,
             `New Meeting: ${meeting.name}`,
             `A new meeting has been scheduled for ${new Date(meeting.date).toLocaleDateString()} at ${meeting.time}.`,
-            { type: 'meeting_created', meetingId: meeting._id }
+            { type: 'meeting_created', meetingId: meeting._id, senderId: req.user._id }
         );
 
     } catch (error) {
@@ -370,6 +370,15 @@ exports.markAttendance = async (req, res) => {
 
         if (!meeting) return res.status(404).json({ success: false, message: 'Meeting not found' });
 
+        // Check if user is a member of the club
+        const isMember = req.user.clubsJoined.some(c => c.clubId.toString() === meeting.clubId.toString());
+        if (!isMember && req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'You are not a member of this club. Please join the club to mark attendance.'
+            });
+        }
+
         if (!meeting.isAttendanceActive) {
             return res.status(400).json({ success: false, message: 'Attendance is not currently active for this meeting.' });
         }
@@ -381,7 +390,7 @@ exports.markAttendance = async (req, res) => {
         // Check if already marked
         const alreadyMarked = meeting.attendees.find(a => a.userId.toString() === req.user._id.toString());
         if (alreadyMarked) {
-            return res.status(400).json({ success: false, message: 'You have already marked attendance.' });
+            return res.status(400).json({ success: false, message: 'Attendance already marked.' });
         }
 
         // Add to attendees

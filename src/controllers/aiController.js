@@ -14,6 +14,13 @@ const groq = new Groq({
  */
 exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) => {
     try {
+        if (!process.env.GROQ_API_KEY) {
+            console.error('GROQ_API_KEY is not defined in environment variables');
+            return "I'm currently under maintenance (Missing Configuration). Please try again later.";
+        }
+
+        console.log(`[AI] Generating response for: "${userMessage}"`);
+
         // Build context from chat history
         const messages = [
             {
@@ -27,6 +34,9 @@ exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) =>
         ];
 
         // Add recent chat history for context (last 10 messages)
+        // ... (rest of the history logic is fine, preserving it implicitly by just wrapping the try/catch block if I replaced the whole function, 
+        // but here I am replacing the whole function so I must re-include logic)
+
         const recentHistory = chatHistory.slice(-10);
         recentHistory.forEach(msg => {
             if (msg.content && !msg.deleted) {
@@ -47,7 +57,7 @@ exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) =>
         // Call Groq API
         const completion = await groq.chat.completions.create({
             messages: messages,
-            model: 'llama-3.3-70b-versatile',
+            model: 'llama-3.1-70b-versatile',
             temperature: 0.7,
             max_tokens: 150, // Keep responses short
             top_p: 1,
@@ -55,7 +65,7 @@ exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) =>
 
         return completion.choices[0]?.message?.content || "I'm here to help! Could you rephrase that?";
     } catch (error) {
-        console.error('Groq AI Error:', error);
+        console.error('Groq AI Error:', error.message, error.response?.data || '');
         return "Sorry, I'm having trouble responding right now. Please try again!";
     }
 };
@@ -68,7 +78,7 @@ exports.handleAIMention = async (senderId, receiverId, conversationMessages, men
     try {
         // Get AI response
         const conversationId = [senderId, receiverId].sort().join('-');
-        const aiResponse = await this.getAIResponse(
+        const aiResponse = await exports.getAIResponse(
             conversationId,
             mentionedMessage.content,
             conversationMessages
