@@ -18,6 +18,33 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
+// Image filter
+const imageFilter = (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = file.mimetype.startsWith('image/') || allowedTypes.test(file.mimetype);
+
+    if (extname && mimetype) {
+        return cb(null, true);
+    } else {
+        console.log('File rejected by imageFilter:', {
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            ext: path.extname(file.originalname).toLowerCase()
+        });
+        cb(new Error(`Invalid file type (${file.mimetype}). Only images are allowed.`));
+    }
+};
+
+// Upload configurations
+const upload = multer({
+    storage,
+    limits: {
+        fileSize: 20 * 1024 * 1024, // 20MB limit
+    },
+    fileFilter
+});
+
 // Media filter (Images & Videos)
 const mediaFilter = (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi|wmv|flv|mkv/;
