@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
-const { uploadImage, handleMulterError } = require('../middleware/upload');
+const { uploadMedia, handleMulterError } = require('../middleware/upload');
 const {
     uploadSnap,
     getClubSnaps,
@@ -14,7 +14,7 @@ const {
 
 router.use(protect);
 
-router.post('/', uploadImage.single('image'), handleMulterError, uploadSnap);
+router.post('/', uploadMedia.single('image'), handleMulterError, uploadSnap);
 router.get('/my-clubs', getMySnaps);
 router.get('/club/:clubId', getClubSnaps);
 router.post('/:snapId/view', viewSnap);

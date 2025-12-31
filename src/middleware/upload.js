@@ -18,32 +18,23 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-// Image filter
-const imageFilter = (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+// Media filter (Images & Videos)
+const mediaFilter = (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi|wmv|flv|mkv/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = file.mimetype.startsWith('image/') || allowedTypes.test(file.mimetype);
+    const mimetype = file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/');
 
     if (extname && mimetype) {
         return cb(null, true);
     } else {
-        console.log('File rejected by imageFilter:', {
+        console.log('File rejected by mediaFilter:', {
             originalname: file.originalname,
             mimetype: file.mimetype,
             ext: path.extname(file.originalname).toLowerCase()
         });
-        cb(new Error(`Invalid file type (${file.mimetype}). Only images are allowed.`));
+        cb(new Error(`Invalid file type (${file.mimetype}). Only images and videos are allowed.`));
     }
 };
-
-// Upload configurations
-const upload = multer({
-    storage,
-    limits: {
-        fileSize: 20 * 1024 * 1024, // 20MB limit
-    },
-    fileFilter
-});
 
 const uploadImage = multer({
     storage,
@@ -51,6 +42,14 @@ const uploadImage = multer({
         fileSize: 20 * 1024 * 1024, // 20MB limit for images
     },
     fileFilter: imageFilter
+});
+
+const uploadMedia = multer({
+    storage,
+    limits: {
+        fileSize: 200 * 1024 * 1024, // 200MB limit for media
+    },
+    fileFilter: mediaFilter
 });
 
 // Error handling middleware for multer
@@ -78,5 +77,6 @@ const handleMulterError = (err, req, res, next) => {
 module.exports = {
     upload,
     uploadImage,
+    uploadMedia,
     handleMulterError
 };
