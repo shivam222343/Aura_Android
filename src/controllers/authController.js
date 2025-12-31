@@ -532,9 +532,11 @@ exports.getDashboardData = async (req, res) => {
                         }
                     }).select('displayName profilePicture clubsJoined');
 
-                    // Filter for shared clubs (excluding self)
+                    // Filter for shared clubs (Include self if it's their birthday)
                     return birthdayUsers.filter(u => {
-                        if (u._id.toString() === userId.toString()) return false;
+                        const isSelf = u._id.toString() === userId.toString();
+                        if (isSelf) return true;
+
                         const userClubIds = u.clubsJoined.map(c => (c.clubId?._id || c.clubId).toString());
                         return userClubIds.some(cid => clubIds.includes(cid));
                     }).map(u => ({

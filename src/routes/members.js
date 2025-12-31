@@ -20,14 +20,10 @@ router.get('/:clubId', protect, async (req, res) => {
             // Or maybe users who are in ANY club the current user is in?
             // "All" typically implies the "Global" view.
             // Let's return all users who are members (not just random users)
-            members = await User.find({ role: { $ne: 'user' } }) // Assuming 'user' is default unverified role? Or just fetch everyone
-                .select('displayName email profilePicture isOnline lastSeen clubsJoined stats');
+            members = await User.find({ role: { $ne: 'user' } })
+                .select('displayName email profilePicture isOnline lastSeen clubsJoined stats birthDate');
 
             console.log(`[Members] Found ${members.length} members globally`);
-
-            // For stats, we might skip detailed calculation for "all" for performance, 
-            // OR fetch meetings for all clubs.
-            // Let's keep it simple for now to fix the crash.
 
         } else {
             // Specific Club Logic
@@ -42,7 +38,7 @@ router.get('/:clubId', protect, async (req, res) => {
             // Fetch users using the clubsJoined array on User model
             members = await User.find({
                 'clubsJoined.clubId': clubId
-            }).select('displayName email profilePicture isOnline lastSeen clubsJoined stats');
+            }).select('displayName email profilePicture isOnline lastSeen clubsJoined stats birthDate');
 
             console.log(`[Members] Found ${members.length} members for club ${club.name}`);
 
@@ -52,7 +48,7 @@ router.get('/:clubId', protect, async (req, res) => {
                 if (allMemberIds.length > 0) {
                     members = await User.find({
                         _id: { $in: allMemberIds }
-                    }).select('displayName email profilePicture isOnline lastSeen clubsJoined stats');
+                    }).select('displayName email profilePicture isOnline lastSeen clubsJoined stats birthDate');
                 }
             }
 
