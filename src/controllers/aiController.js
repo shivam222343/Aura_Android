@@ -14,7 +14,10 @@ const groq = new Groq({
  */
 exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) => {
     try {
-        if (!process.env.GROQ_API_KEY) {
+        const apiKey = process.env.GROQ_API_KEY;
+        console.log(`[AI] Config Check - Key Exists: ${!!apiKey}`);
+
+        if (!apiKey) {
             console.error('GROQ_API_KEY is not defined in environment variables');
             return "I'm currently under maintenance (Missing Configuration). Please try again later.";
         }

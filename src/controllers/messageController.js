@@ -113,7 +113,8 @@ exports.sendMessage = async (req, res) => {
         }
 
         // Handle AI mention asynchronously
-        if (mentionAI && /@Eta/i.test(content)) {
+        if (mentionAI || /@Eta/i.test(content)) {
+            console.log(`[Message] AI Mention detected in message: ${newMessage._id}`);
             const aiController = require('./aiController');
 
             // Get conversation history

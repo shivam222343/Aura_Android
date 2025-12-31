@@ -179,6 +179,7 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🤖 Groq AI: ${process.env.GROQ_API_KEY ? 'Enabled ✅' : 'Disabled (Missing Key) ❌'}`);
 });
 
 // Handle unhandled promise rejections
