@@ -187,7 +187,16 @@ exports.updateProfile = async (req, res) => {
         if (fullName) user.fullName = fullName;
         if (birthDate) user.birthDate = new Date(birthDate);
         if (branch) user.branch = branch;
+        if (branch) user.branch = branch;
         if (passoutYear) user.passoutYear = passoutYear;
+
+        // Support updating profile picture via URL directly (e.g. from AI avatars)
+        if (req.body.profilePictureUrl) {
+            user.profilePicture = {
+                url: req.body.profilePictureUrl,
+                publicId: 'ai-generated' // Marker for non-cloudinary images
+            };
+        }
 
         await user.save();
 
