@@ -186,8 +186,31 @@ exports.updateProfile = async (req, res) => {
         if (displayName) user.displayName = displayName;
         if (phoneNumber) user.phoneNumber = phoneNumber;
         if (preferences) {
-            const currentPrefs = user.preferences ? user.preferences.toObject ? user.preferences.toObject() : user.preferences : {};
-            user.preferences = { ...currentPrefs, ...preferences };
+            // Explicitly handle preferences updates to avoid Mongoose subdocument issues
+            if (preferences.theme) {
+                user.preferences.theme = preferences.theme;
+            }
+            if (preferences.sidebarBanner !== undefined) {
+                user.preferences.sidebarBanner = preferences.sidebarBanner;
+            }
+
+            // For nested objects like notifications, we should be careful to merge
+            if (preferences.notifications) {
+                if (!user.preferences.notifications) {
+                    user.preferences.notifications = {
+                        email: true, push: true, meetings: true, tasks: true
+                    };
+                }
+
+                // Manually merge known fields to be safe
+                if (preferences.notifications.email !== undefined) user.preferences.notifications.email = preferences.notifications.email;
+                if (preferences.notifications.push !== undefined) user.preferences.notifications.push = preferences.notifications.push;
+                if (preferences.notifications.meetings !== undefined) user.preferences.notifications.meetings = preferences.notifications.meetings;
+                if (preferences.notifications.tasks !== undefined) user.preferences.notifications.tasks = preferences.notifications.tasks;
+            }
+
+            // Force Mongoose to acknowledge the change for mixed/nested types if needed
+            user.markModified('preferences');
         }
 
         // New profile fields
