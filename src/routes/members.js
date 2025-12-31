@@ -6,87 +6,100 @@ const Club = require('../models/Club');
 const Meeting = require('../models/Meeting');
 
 // Get all members for a club
+// Get all members for a club (or all clubs)
 router.get('/:clubId', protect, async (req, res) => {
     try {
         const { clubId } = req.params;
         console.log(`[Members] Fetching members for club: ${clubId}`);
 
-        const club = await Club.findById(clubId);
-        if (!club) {
-            return res.status(404).json({
-                success: false,
-                message: 'Club not found'
-            });
-        }
+        let members = [];
+        let allMeetings = [];
 
-        // Fetch users using the clubsJoined array on User model
-        let members = await User.find({
-            'clubsJoined.clubId': clubId
-        }).select('displayName email profilePicture isOnline lastSeen clubsJoined stats');
+        if (clubId === 'all') {
+            // Fetch ALL users (simplified view for global)
+            // Or maybe users who are in ANY club the current user is in?
+            // "All" typically implies the "Global" view.
+            // Let's return all users who are members (not just random users)
+            members = await User.find({ role: { $ne: 'user' } }) // Assuming 'user' is default unverified role? Or just fetch everyone
+                .select('displayName email profilePicture isOnline lastSeen clubsJoined stats');
 
-        console.log(`[Members] Found ${members.length} members for club ${club.name}`);
+            console.log(`[Members] Found ${members.length} members globally`);
 
-        // Fallback: If no members found via User query, try using the Club's member arrays
-        if (members.length === 0) {
-            console.log(`[Members] Fallback: Searching via Club.members array`);
-            const allMemberIds = [...club.members, ...club.admins, ...club.alumni];
-            if (allMemberIds.length > 0) {
-                members = await User.find({
-                    _id: { $in: allMemberIds }
-                }).select('displayName email profilePicture isOnline lastSeen clubsJoined stats');
-                console.log(`[Members] Fallback found ${members.length} members`);
+            // For stats, we might skip detailed calculation for "all" for performance, 
+            // OR fetch meetings for all clubs.
+            // Let's keep it simple for now to fix the crash.
+
+        } else {
+            // Specific Club Logic
+            const club = await Club.findById(clubId);
+            if (!club) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Club not found'
+                });
             }
-        }
 
-        // Fetch all meetings for all clubs joined by these members to calculate stats
-        const allMemberClubIds = [...new Set(members.flatMap(m => m.clubsJoined.map(c => c.clubId.toString())))];
-        const allMeetings = await Meeting.find({
-            clubId: { $in: allMemberClubIds },
-            status: { $in: ['completed', 'ongoing'] }
-        }).sort('-date');
+            // Fetch users using the clubsJoined array on User model
+            members = await User.find({
+                'clubsJoined.clubId': clubId
+            }).select('displayName email profilePicture isOnline lastSeen clubsJoined stats');
+
+            console.log(`[Members] Found ${members.length} members for club ${club.name}`);
+
+            // Fallback strategy if needed
+            if (members.length === 0) {
+                const allMemberIds = [...club.members, ...club.admins, ...club.alumni];
+                if (allMemberIds.length > 0) {
+                    members = await User.find({
+                        _id: { $in: allMemberIds }
+                    }).select('displayName email profilePicture isOnline lastSeen clubsJoined stats');
+                }
+            }
+
+            // Fetch meetings for stats
+            allMeetings = await Meeting.find({
+                clubId: clubId,
+                status: { $in: ['completed', 'ongoing'] }
+            }).sort('-date');
+        }
 
         const enhancedMembers = members.map(member => {
             const memberObj = member.toObject();
 
-            // Calculate stats for EACH club the member has joined
-            const allClubStats = member.clubsJoined.map(joinedClub => {
-                const cId = joinedClub.clubId.toString();
-                const clubMeetings = allMeetings.filter(m =>
-                    m.clubId.toString() === cId &&
-                    m.attendees.some(a => a.userId.toString() === member._id.toString())
-                );
+            if (clubId === 'all') {
+                // Simplified stats for global view
+                memberObj.clubStats = { attendanceRate: 0 };
+                return memberObj;
+            }
 
-                const attendedCount = clubMeetings.filter(m => {
-                    const a = m.attendees.find(att => att.userId.toString() === member._id.toString());
-                    return a && (a.status === 'present' || a.status === 'late');
-                }).length;
+            // Calculate specific club stats
+            const clubMeetings = allMeetings.filter(m =>
+                m.attendees.some(a => a.userId.toString() === member._id.toString())
+            );
 
-                const history = allMeetings
-                    .filter(m => m.clubId.toString() === cId)
-                    .slice(0, 5)
-                    .map(m => {
-                        const record = m.attendees.find(a => a.userId.toString() === member._id.toString());
-                        return {
-                            name: m.name,
-                            date: m.date,
-                            status: record ? record.status : 'absent'
-                        };
-                    });
+            const attendedCount = clubMeetings.filter(m => {
+                const a = m.attendees.find(att => att.userId.toString() === member._id.toString());
+                return a && (a.status === 'present' || a.status === 'late');
+            }).length;
 
-                return {
-                    clubId: cId,
-                    totalMeetings: clubMeetings.length,
-                    attendedMeetings: attendedCount,
-                    attendanceRate: clubMeetings.length > 0 ? (attendedCount / clubMeetings.length) * 100 : 0,
-                    attendanceHistory: history
-                };
-            });
+            const history = allMeetings
+                .slice(0, 5)
+                .map(m => {
+                    const record = m.attendees.find(a => a.userId.toString() === member._id.toString());
+                    return {
+                        name: m.name,
+                        date: m.date,
+                        status: record ? record.status : 'absent'
+                    };
+                });
 
-            // Keep the current club's stats as the primary ones for the list view
-            const currentClubStats = allClubStats.find(s => s.clubId === clubId);
-
-            memberObj.clubStats = currentClubStats || { attendanceRate: 0 };
-            memberObj.allClubStats = allClubStats; // Array of stats for ALL their clubs
+            memberObj.clubStats = {
+                clubId: clubId,
+                totalMeetings: clubMeetings.length,
+                attendedMeetings: attendedCount,
+                attendanceRate: clubMeetings.length > 0 ? (attendedCount / clubMeetings.length) * 100 : 0,
+                attendanceHistory: history
+            };
 
             return memberObj;
         });

@@ -38,7 +38,11 @@ exports.signup = async (req, res) => {
             password,
             displayName,
             phoneNumber,
-            role: email.includes('admin') ? 'admin' : 'member'
+            role: email.includes('admin') ? 'admin' : 'member',
+            profilePicture: {
+                url: `https://api.dicebear.com/9.x/notionists/png?seed=${Math.random().toString(36).substring(7)}&backgroundColor=b6e3f4,c0aede,d1d4f9`,
+                publicId: 'default-ai'
+            }
         });
 
         // Generate token
