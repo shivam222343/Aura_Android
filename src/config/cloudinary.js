@@ -23,11 +23,7 @@ const uploadImage = async (filePath, folder = 'mavericks') => {
         const result = await cloudinary.uploader.upload(filePath, {
             folder,
             resource_type: 'auto',
-            transformation: [
-                { width: 1000, height: 1000, crop: 'limit' },
-                { quality: 'auto' },
-                { fetch_format: 'auto' }
-            ]
+            timeout: 600000,
         });
         return {
             url: result.secure_url,
@@ -64,11 +60,7 @@ const uploadImageBuffer = (buffer, folder = 'mavericks') => {
             {
                 folder,
                 resource_type: 'auto',
-                transformation: [
-                    { width: 1000, height: 1000, crop: 'limit' },
-                    { quality: 'auto' },
-                    { fetch_format: 'auto' }
-                ]
+                timeout: 600000
             },
             (error, result) => {
                 if (error) {
