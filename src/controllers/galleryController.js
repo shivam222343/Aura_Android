@@ -44,7 +44,7 @@ exports.uploadImage = async (req, res) => {
             clubId: validClubId,
             category: category || 'other',
             tags: tags ? JSON.parse(tags) : [],
-            status: 'approved' // Auto-approve for immediate visibility
+            status: 'pending' // Require admin approval
         });
 
         res.status(201).json({
