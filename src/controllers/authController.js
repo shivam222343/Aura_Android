@@ -185,7 +185,10 @@ exports.updateProfile = async (req, res) => {
 
         if (displayName) user.displayName = displayName;
         if (phoneNumber) user.phoneNumber = phoneNumber;
-        if (preferences) user.preferences = { ...user.preferences, ...preferences };
+        if (preferences) {
+            const currentPrefs = user.preferences ? user.preferences.toObject ? user.preferences.toObject() : user.preferences : {};
+            user.preferences = { ...currentPrefs, ...preferences };
+        }
 
         // New profile fields
         if (fullName) user.fullName = fullName;
@@ -194,8 +197,24 @@ exports.updateProfile = async (req, res) => {
         if (branch) user.branch = branch;
         if (passoutYear) user.passoutYear = passoutYear;
 
-        // Support updating profile picture via URL directly (e.g. from AI avatars)
+        // Support updating profile picture via URL directly (e.g. from AI avatars or History)
         if (req.body.profilePictureUrl) {
+            // Save current pic to history if it valid
+            if (user.profilePicture && user.profilePicture.url && !user.profilePicture.url.includes('dicebear')) {
+                // Avoid duplicates at the top of the stack
+                if (user.profilePictureHistory.length === 0 || user.profilePictureHistory[0].url !== user.profilePicture.url) {
+                    user.profilePictureHistory.unshift({
+                        url: user.profilePicture.url,
+                        publicId: user.profilePicture.publicId,
+                        uploadedAt: new Date()
+                    });
+                }
+                // Keep only last 10
+                if (user.profilePictureHistory.length > 10) {
+                    user.profilePictureHistory = user.profilePictureHistory.slice(0, 10);
+                }
+            }
+
             user.profilePicture = {
                 url: req.body.profilePictureUrl,
                 publicId: 'ai-generated' // Marker for non-cloudinary images
@@ -246,6 +265,20 @@ exports.uploadProfilePicture = async (req, res) => {
 
         // Update user
         const user = await User.findById(req.user._id);
+
+        // Save current pic to history if it exists and is not default
+        if (user.profilePicture && user.profilePicture.url && !user.profilePicture.url.includes('dicebear')) {
+            user.profilePictureHistory.unshift({
+                url: user.profilePicture.url,
+                publicId: user.profilePicture.publicId,
+                uploadedAt: new Date()
+            });
+            // Keep only last 10
+            if (user.profilePictureHistory.length > 10) {
+                user.profilePictureHistory = user.profilePictureHistory.slice(0, 10);
+            }
+        }
+
         user.profilePicture = {
             url: result.url,
             publicId: result.publicId

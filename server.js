@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config(); // Loaded environment variables (Updated for Sidebar)
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');

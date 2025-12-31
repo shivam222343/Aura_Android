@@ -81,18 +81,20 @@ const userSchema = new mongoose.Schema({
         type: String // For push notifications
     },
     preferences: {
-        notifications: {
-            type: Boolean,
-            default: true
-        },
-        emailNotifications: {
-            type: Boolean,
-            default: true
-        },
         theme: {
             type: String,
             enum: ['light', 'dark', 'system'],
             default: 'system'
+        },
+        sidebarBanner: {
+            type: String, // URL of selected banner
+            default: null
+        },
+        notifications: {
+            email: { type: Boolean, default: true },
+            push: { type: Boolean, default: true },
+            meetings: { type: Boolean, default: true },
+            tasks: { type: Boolean, default: true }
         }
     },
     stats: {
@@ -108,7 +110,15 @@ const userSchema = new mongoose.Schema({
             type: Number,
             default: 0
         }
-    }
+    },
+    profilePictureHistory: [{
+        url: String,
+        publicId: String,
+        uploadedAt: {
+            type: Date,
+            default: Date.now
+        }
+    }]
 }, {
     timestamps: true
 });
