@@ -12,7 +12,7 @@ const groupMessageSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['text', 'image', 'video', 'document', 'media'],
+        enum: ['text', 'image', 'video', 'document', 'media', 'file'],
         default: 'text'
     },
     fileUrl: String,
