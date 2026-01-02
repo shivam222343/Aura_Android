@@ -25,28 +25,42 @@ exports.getGroupChat = async (req, res) => {
         }
 
         let groupChat = await GroupChat.findOne({ clubId })
+            .populate('clubId', 'name logo')
             .populate('members.userId', 'displayName profilePicture isOnline')
+            .populate('messages.senderId', 'displayName profilePicture')
+            .populate('messages.reactions.userId', 'displayName profilePicture')
             .populate('lastMessage.senderId', 'displayName profilePicture');
 
         if (groupChat) {
-            // Filter out deleted messages or messages deleted for this user
-            groupChat.messages = groupChat.messages.filter(msg =>
+            // Function to find message by ID and return populated-like object
+            const getPopulatedReply = (replyId) => {
+                if (!replyId) return null;
+                const replyMsg = groupChat.messages.id(replyId);
+                if (!replyMsg) return null;
+
+                // Find sender info from populated members or messages
+                const sender = groupChat.messages.find(m => m.senderId && (m.senderId._id?.toString() === replyMsg.senderId.toString() || m.senderId.toString() === replyMsg.senderId.toString()))?.senderId;
+
+                return {
+                    ...replyMsg.toObject(),
+                    senderId: sender || { displayName: 'Member' }
+                };
+            };
+
+            // Manually populate replyTo for filtered messages
+            const filteredMessages = groupChat.messages.filter(msg =>
                 !msg.deleted &&
                 (!msg.deletedFor || !msg.deletedFor.includes(userId))
-            );
+            ).map(msg => {
+                const msgObj = msg.toObject();
+                if (msgObj.replyTo) {
+                    msgObj.replyTo = getPopulatedReply(msgObj.replyTo);
+                }
+                return msgObj;
+            });
 
-            // Populate messages after filtering (if needed) or just populate them in the query
-            // Mongoose populate on array sometimes needs careful handling after filtering
-            // But since we are populating the whole subdoc in the initial query:
-            groupChat = await GroupChat.findOne({ clubId })
-                .populate('members.userId', 'displayName profilePicture isOnline')
-                .populate('messages.senderId', 'displayName profilePicture')
-                .populate('lastMessage.senderId', 'displayName profilePicture');
-
-            groupChat.messages = groupChat.messages.filter(msg =>
-                !msg.deleted &&
-                (!msg.deletedFor || !msg.deletedFor.includes(userId))
-            );
+            groupChat = groupChat.toObject();
+            groupChat.messages = filteredMessages;
         }
 
         // If group chat doesn't exist, create it and add all club members
@@ -104,9 +118,15 @@ exports.sendGroupMessage = async (req, res) => {
         const { content, type, replyTo } = req.body;
         const userId = req.user._id;
 
+        console.log(`[GroupChat] Message request from user ${userId} to club ${clubId}`);
+
         // Check if user is a member
         const user = await User.findById(userId);
-        const isMember = user.clubsJoined.some(c => c.clubId.toString() === clubId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        const isMember = user.clubsJoined?.some(c => c.clubId?.toString() === clubId);
 
         if (!isMember && req.user.role !== 'admin') {
             return res.status(403).json({
@@ -130,42 +150,66 @@ exports.sendGroupMessage = async (req, res) => {
         let fileSize = null;
 
         if (req.file) {
-            const result = await uploadImage(req.file.path, 'mavericks/group-chat');
-            fileUrl = result.url;
-            fileName = req.file.originalname;
-            fileSize = req.file.size;
+            try {
+                const result = await uploadImage(req.file.path, 'mavericks/group-chat');
+                fileUrl = result.url;
+                fileName = req.file.originalname;
+                fileSize = req.file.size;
+            } catch (uploadError) {
+                console.error('[GroupChat] Cloudinary upload error:', uploadError);
+                return res.status(500).json({ success: false, message: 'Failed to upload attachment' });
+            }
         }
 
         const newMessage = {
             senderId: userId,
             content: content || (fileUrl ? 'Sent an attachment' : ''),
-            type: type || 'text',
+            type: type || (fileUrl ? 'media' : 'text'),
             fileUrl,
             fileName,
             fileSize,
-            replyTo,
+            replyTo: (replyTo && replyTo !== 'null' && replyTo !== '') ? replyTo : undefined,
             createdAt: new Date()
         };
 
         groupChat.messages.push(newMessage);
+
+        // Update last message
+        groupChat.lastMessage = {
+            senderId: userId,
+            content: newMessage.content,
+            createdAt: newMessage.createdAt
+        };
+
         await groupChat.save();
 
-        // Populate the new message
-        const populatedChat = await GroupChat.findById(groupChat._id)
-            .populate('messages.senderId', 'displayName profilePicture');
+        // Instead of populating the whole chat (slow), just get the sender info
+        const senderInfo = await User.findById(userId).select('displayName profilePicture');
 
-        const populatedMessage = populatedChat.messages[populatedChat.messages.length - 1];
+        const lastSavedMessage = groupChat.messages[groupChat.messages.length - 1];
+        const populatedMessage = {
+            ...lastSavedMessage.toObject(),
+            senderId: senderInfo
+        };
 
-        // Emit socket event to all group members
+        // Handle replyTo population for the socket/response
+        if (populatedMessage.replyTo) {
+            const replyMsg = groupChat.messages.id(populatedMessage.replyTo);
+            if (replyMsg) {
+                const replySender = await User.findById(replyMsg.senderId).select('displayName profilePicture');
+                populatedMessage.replyTo = {
+                    ...replyMsg.toObject(),
+                    senderId: replySender
+                };
+            }
+        }
+
+        // Emit socket event to the club room (MUCH faster than looping)
         const io = req.app.get('io');
         if (io) {
-            groupChat.members.forEach(member => {
-                if (member.userId.toString() !== userId.toString()) {
-                    io.to(member.userId.toString()).emit('group:message', {
-                        clubId,
-                        message: populatedMessage
-                    });
-                }
+            io.to(`club:${clubId}`).emit('group:message', {
+                clubId,
+                message: populatedMessage
             });
         }
 
@@ -174,10 +218,11 @@ exports.sendGroupMessage = async (req, res) => {
             data: populatedMessage
         });
     } catch (error) {
-        console.error('Error sending group message:', error);
+        console.error('[GroupChat] Error sending message:', error);
         res.status(500).json({
             success: false,
-            message: 'Error sending message'
+            message: 'Error sending message',
+            error: error.message
         });
     }
 };
@@ -276,14 +321,12 @@ exports.deleteGroupMessage = async (req, res) => {
 
         await groupChat.save();
 
-        // Emit socket event if deleted for everyone
+        // Emit socket event to the club room if deleted for everyone
         const io = req.app.get('io');
         if (io && type === 'everyone') {
-            groupChat.members.forEach(member => {
-                io.to(member.userId.toString()).emit('group:message:delete', {
-                    clubId,
-                    messageId
-                });
+            io.to(`club:${clubId}`).emit('group:message:delete', {
+                clubId,
+                messageId
             });
         }
 
@@ -335,6 +378,74 @@ exports.getUnreadCount = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error fetching unread count'
+        });
+    }
+};
+/**
+ * @desc    Add/Update reaction to a group message
+ * @route   POST /api/group-chat/:clubId/messages/:messageId/reaction
+ * @access  Private (Club Members)
+ */
+exports.addReaction = async (req, res) => {
+    try {
+        const { clubId, messageId } = req.params;
+        const { emoji } = req.body;
+        const userId = req.user._id;
+
+        const groupChat = await GroupChat.findOne({ clubId });
+        if (!groupChat) {
+            return res.status(404).json({ success: false, message: 'Group chat not found' });
+        }
+
+        const message = groupChat.messages.id(messageId);
+        if (!message) {
+            return res.status(404).json({ success: false, message: 'Message not found' });
+        }
+
+        if (!message.reactions) message.reactions = [];
+
+        const existingReactionIndex = message.reactions.findIndex(
+            r => r.userId.toString() === userId.toString()
+        );
+
+        if (existingReactionIndex > -1) {
+            if (message.reactions[existingReactionIndex].emoji === emoji) {
+                // Remove if same
+                message.reactions.splice(existingReactionIndex, 1);
+            } else {
+                // Update if different
+                message.reactions[existingReactionIndex].emoji = emoji;
+            }
+        } else {
+            message.reactions.push({ userId, emoji });
+        }
+
+        await groupChat.save();
+
+        // Populate the reactions user info before emitting
+        const populatedGroupChat = await GroupChat.findOne({ clubId })
+            .populate('messages.reactions.userId', 'displayName profilePicture');
+
+        const populatedMessage = populatedGroupChat.messages.id(messageId);
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${clubId}`).emit('group:message:reaction', {
+                clubId,
+                messageId,
+                reactions: populatedMessage.reactions
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: populatedMessage.reactions
+        });
+    } catch (error) {
+        console.error('Error adding reaction:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error adding reaction'
         });
     }
 };

@@ -21,6 +21,17 @@ const groupMessageSchema = new mongoose.Schema({
     replyTo: {
         type: mongoose.Schema.Types.ObjectId
     },
+    reactions: [{
+        userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        emoji: String,
+        createdAt: {
+            type: Date,
+            default: Date.now
+        }
+    }],
     readBy: [{
         userId: {
             type: mongoose.Schema.Types.ObjectId,

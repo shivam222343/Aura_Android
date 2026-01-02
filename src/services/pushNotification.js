@@ -65,7 +65,10 @@ const sendPushNotification = async (pushToken, { title, body, data = {} }) => {
                 title: title,
                 body: body,
             },
-            data: data, // data must be map of strings
+            data: Object.keys(data).reduce((acc, key) => {
+                acc[key] = String(data[key]);
+                return acc;
+            }, {}),
             token: pushToken,
             android: {
                 priority: 'high',
