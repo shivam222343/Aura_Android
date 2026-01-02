@@ -5,6 +5,7 @@ const { uploadImage, handleMulterError } = require('../middleware/upload');
 const {
     getAllClubs,
     createClub,
+    updateClub,
     addMemberToClub,
     getClubMembers,
     removeMemberFromClub,
@@ -14,6 +15,7 @@ const {
 // Public/Member routes
 router.get('/', protect, getAllClubs);
 router.get('/:id/members', protect, getClubMembers);
+router.put('/:id', protect, uploadImage.single('logo'), handleMulterError, updateClub);
 
 // Admin routes
 router.post('/', protect, authorize('admin'), uploadImage.single('logo'), handleMulterError, createClub);

@@ -86,6 +86,55 @@ exports.createClub = async (req, res) => {
 };
 
 /**
+ * @desc    Update club details (Name, Description, Logo)
+ * @route   PUT /api/clubs/:id
+ * @access  Private (Club Admins/Members)
+ */
+exports.updateClub = async (req, res) => {
+    try {
+        let club = await Club.findById(req.params.id);
+
+        if (!club) {
+            return res.status(404).json({ success: false, message: 'Club not found' });
+        }
+
+        // Check if user is authorized (Admin or Club Member)
+        const isMember = req.user.clubsJoined.some(c => c.clubId.toString() === req.params.id);
+        if (!isMember && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Not authorized to update this club' });
+        }
+
+        const { name, description } = req.body;
+        if (name) club.name = name;
+        if (description) club.description = description;
+
+        // Handle Image Upload
+        if (req.file) {
+            try {
+                const result = await uploadImage(req.file.path, 'mavericks/clubs');
+                club.logo = {
+                    url: result.url,
+                    publicId: result.publicId
+                };
+            } catch (err) {
+                console.error('Cloudinary upload error:', err);
+                return res.status(500).json({ success: false, message: 'Image upload failed' });
+            }
+        }
+
+        await club.save();
+
+        res.status(200).json({
+            success: true,
+            data: club
+        });
+    } catch (error) {
+        console.error('Update club error:', error);
+        res.status(500).json({ success: false, message: 'Error updating club' });
+    }
+};
+
+/**
  * @desc    Add member to club via Maverick ID
  * @route   POST /api/clubs/add-member
  * @access  Admin/Subadmin
