@@ -120,7 +120,7 @@ exports.getGroupChat = async (req, res) => {
 exports.sendGroupMessage = async (req, res) => {
     try {
         let { clubId } = req.params;
-        const { content, type, replyTo } = req.body;
+        let { content, type, replyTo } = req.body;
         const userId = req.user._id;
 
         // Ensure clubId is a string if it's passed as an object
@@ -129,8 +129,12 @@ exports.sendGroupMessage = async (req, res) => {
         }
 
         console.log(`[GroupChat] Message request from user ${userId} to club ${clubId}`);
-        console.log('[GroupChat] Request Body:', req.body);
-        console.log('[GroupChat] Request File:', req.file ? 'Present' : 'None');
+
+        // Normalize message type to match schema enum
+        const validTypes = ['text', 'image', 'video', 'document', 'media'];
+        if (type && !validTypes.includes(type)) {
+            type = req.file ? 'media' : 'text';
+        }
 
         // Check if user is a member
         const user = await User.findById(userId);
