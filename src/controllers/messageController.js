@@ -1,7 +1,6 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
 const { sendPushNotification } = require('../utils/pushNotifications');
-const { uploadImageBuffer } = require('../config/cloudinary');
 
 /**
  * @desc    Get messages for a conversation
@@ -67,20 +66,12 @@ exports.sendMessage = async (req, res) => {
             }
         }
 
-        let resolvedFileUrl = fileUrl;
-
-        // Handle file upload if present
-        if (req.file) {
-            const uploadResult = await uploadImageBuffer(req.file.buffer, 'mavericks/chats');
-            resolvedFileUrl = uploadResult.url;
-        }
-
         const newMessage = await Message.create({
             senderId,
             receiverId,
-            content: content || (resolvedFileUrl ? 'Sent an attachment' : ''),
-            type: type || (resolvedFileUrl ? 'image' : 'text'),
-            fileUrl: resolvedFileUrl,
+            content,
+            type,
+            fileUrl,
             clubId,
             replyTo,
             mentionAI: mentionAI || false,

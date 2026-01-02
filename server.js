@@ -70,7 +70,6 @@ app.use('/api/snaps', require('./src/routes/snaps'));
 app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/analytics', require('./src/routes/analytics'));
 app.use('/api/users', require('./src/routes/users'));
-app.use('/api/group-chat', require('./src/routes/groupChat'));
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
@@ -136,25 +135,6 @@ io.on('connection', (socket) => {
             notification.message || 'You have a new notification',
             { type: 'general_notification', ...notification }
         );
-    });
-
-    // Group chat events
-    socket.on('group:join', (clubId) => {
-        socket.join(`group:${clubId}`);
-        console.log(`👥 User ${socket.userId} joined group chat: ${clubId}`);
-    });
-
-    socket.on('group:leave', (clubId) => {
-        socket.leave(`group:${clubId}`);
-        console.log(`👥 User ${socket.userId} left group chat: ${clubId}`);
-    });
-
-    socket.on('group:typing', (data) => {
-        const { clubId, isTyping } = data;
-        socket.to(`group:${clubId}`).emit('group:typing', {
-            userId: socket.userId,
-            isTyping
-        });
     });
 
     // Disconnect

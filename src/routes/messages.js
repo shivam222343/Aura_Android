@@ -10,13 +10,11 @@ const {
     getConversations
 } = require('../controllers/messageController');
 
-const { uploadMedia, handleMulterError } = require('../middleware/upload');
-
 router.use(protect);
 
 router.get('/conversations/list', getConversations);
 router.get('/:userId', getMessages);
-router.post('/', uploadMedia.single('file'), handleMulterError, sendMessage);
+router.post('/', sendMessage);
 router.put('/:userId/read', markAsRead);
 router.post('/:messageId/reaction', addReaction);
 router.delete('/:messageId', deleteMessage);

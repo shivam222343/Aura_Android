@@ -1,7 +1,7 @@
 const GroupChat = require('../models/GroupChat');
 const Club = require('../models/Club');
 const User = require('../models/User');
-const { uploadImageBuffer } = require('../config/cloudinary');
+const { uploadImage } = require('../config/cloudinary');
 
 /**
  * @desc    Get group chat for a club
@@ -39,6 +39,7 @@ exports.getGroupChat = async (req, res) => {
                 });
             }
 
+            // Get all club members
             const clubMembers = await User.find({
                 'clubsJoined.clubId': clubId
             });
@@ -59,18 +60,9 @@ exports.getGroupChat = async (req, res) => {
                 .populate('messages.senderId', 'displayName profilePicture');
         }
 
-        // Calculate unread count for the current user
-        const unreadCount = groupChat.messages.filter(msg =>
-            !msg.deleted &&
-            !msg.readBy.some(r => r.userId.toString() === userId.toString())
-        ).length;
-
         res.status(200).json({
             success: true,
-            data: {
-                ...(groupChat.toObject ? groupChat.toObject() : groupChat),
-                unreadCount
-            }
+            data: groupChat
         });
     } catch (error) {
         console.error('Error fetching group chat:', error);
@@ -118,7 +110,7 @@ exports.sendGroupMessage = async (req, res) => {
         let fileSize = null;
 
         if (req.file) {
-            const result = await uploadImageBuffer(req.file.buffer, 'mavericks/group-chat');
+            const result = await uploadImage(req.file.path, 'mavericks/group-chat');
             fileUrl = result.url;
             fileName = req.file.originalname;
             fileSize = req.file.size;
@@ -257,7 +249,12 @@ exports.deleteGroupMessage = async (req, res) => {
         // Emit socket event
         const io = req.app.get('io');
         if (io) {
-            io.to(`group:${clubId}`).emit('group:message:delete', { clubId, messageId });
+            groupChat.members.forEach(member => {
+                io.to(member.userId.toString()).emit('group:message:delete', {
+                    clubId,
+                    messageId
+                });
+            });
         }
 
         res.status(200).json({
@@ -265,133 +262,10 @@ exports.deleteGroupMessage = async (req, res) => {
             message: 'Message deleted'
         });
     } catch (error) {
-        console.error('Error deleting group message:', error);
+        console.error('Error deleting message:', error);
         res.status(500).json({
             success: false,
             message: 'Error deleting message'
         });
-    }
-};
-
-/**
- * @desc    Add reaction to group message
- * @route   POST /api/group-chat/:clubId/messages/:messageId/reaction
- * @access  Private (Club Members)
- */
-exports.addGroupReaction = async (req, res) => {
-    try {
-        const { clubId, messageId } = req.params;
-        const { emoji } = req.body;
-        const userId = req.user._id;
-
-        const groupChat = await GroupChat.findOne({ clubId });
-        if (!groupChat) return res.status(404).json({ success: false, message: 'Group chat not found' });
-
-        const message = groupChat.messages.id(messageId);
-        if (!message) return res.status(404).json({ success: false, message: 'Message not found' });
-
-        // Remove existing reaction from this user if any
-        message.reactions = message.reactions.filter(r => r.userId.toString() !== userId.toString());
-
-        // Add new reaction
-        message.reactions.push({ userId, emoji });
-
-        await groupChat.save();
-
-        // Emit socket event
-        const io = req.app.get('io');
-        if (io) {
-            io.to(`group:${clubId}`).emit('group:message:reaction', { clubId, messageId, reactions: message.reactions });
-        }
-
-        res.status(200).json({
-            success: true,
-            data: message.reactions
-        });
-    } catch (error) {
-        console.error('Error adding reaction:', error);
-        res.status(500).json({ success: false, message: 'Error adding reaction' });
-    }
-};
-
-/**
- * @desc    Update group settings (Name, Icon)
- * @route   PUT /api/group-chat/:clubId/settings
- * @access  Private (Club Admin)
- */
-exports.updateGroupSettings = async (req, res) => {
-    try {
-        const { clubId } = req.params;
-        const { name } = req.body;
-        const userId = req.user._id;
-
-        const groupChat = await GroupChat.findOne({ clubId });
-        if (!groupChat) {
-            return res.status(404).json({ success: false, message: 'Group chat not found' });
-        }
-
-        // Check if user is an admin of the group
-        const member = groupChat.members.find(m => m.userId.toString() === userId.toString());
-        if (!member || (member.role !== 'admin' && req.user.role !== 'admin')) {
-            return res.status(403).json({ success: false, message: 'Only admins can update group settings' });
-        }
-
-        if (name) groupChat.name = name;
-
-        if (req.file) {
-            const result = await uploadImageBuffer(req.file.buffer, 'mavericks/group-icons');
-            groupChat.groupIcon = {
-                url: result.url,
-                publicId: result.publicId
-            };
-        }
-
-        await groupChat.save();
-
-        // Emit socket event for real-time settings update
-        const io = req.app.get('io');
-        if (io) {
-            io.to(`group:${clubId}`).emit('group:settings_update', groupChat);
-        }
-
-        res.status(200).json({
-            success: true,
-            data: groupChat
-        });
-    } catch (error) {
-        console.error('Error updating group settings:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error updating group settings'
-        });
-    }
-};
-/**
- * @desc    Get total unread count for all group chats
- * @route   GET /api/group-chat/unread/total
- * @access  Private
- */
-exports.getGroupsUnreadCount = async (req, res) => {
-    try {
-        const userId = req.user._id;
-        // Find all group chats where user is a member
-        const groupChats = await GroupChat.find({ 'members.userId': userId });
-
-        let totalUnread = 0;
-        groupChats.forEach(chat => {
-            const unreadInChat = chat.messages.filter(msg =>
-                !msg.deleted &&
-                !msg.readBy.some(r => r.userId.toString() === userId.toString())
-            ).length;
-            totalUnread += unreadInChat;
-        });
-
-        res.status(200).json({
-            success: true,
-            totalUnread
-        });
-    } catch (error) {
-        console.error('Error fetching total group unread count:', error);
-        res.status(500).json({ success: false, message: 'Error fetching total unread count' });
     }
 };
