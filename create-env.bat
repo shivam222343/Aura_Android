@@ -18,6 +18,7 @@ echo EMAIL_USER=your_email@gmail.com
 echo EMAIL_PASSWORD=your_app_password
 echo GOOGLE_AI_API_KEY=your_google_gemini_api_key
 echo GROQ_API_KEY=your_groq_api_key
+echo ADMIN_SUPER_KEY=MAVERICKS_SUPER_KEY_2024
 ) > .env
 
 echo .env file created successfully!
