@@ -269,3 +269,42 @@ exports.deleteGroupMessage = async (req, res) => {
         });
     }
 };
+
+/**
+ * @desc    Get unread message count for group chat
+ * @route   GET /api/group-chat/:clubId/unread-count
+ * @access  Private (Club Members)
+ */
+exports.getUnreadCount = async (req, res) => {
+    try {
+        const { clubId } = req.params;
+        const userId = req.user._id;
+
+        const groupChat = await GroupChat.findOne({ clubId });
+
+        if (!groupChat) {
+            return res.status(200).json({
+                success: true,
+                data: { unreadCount: 0 }
+            });
+        }
+
+        // Count messages that don't have the current user in readBy
+        const unreadCount = groupChat.messages.filter(msg =>
+            !msg.deleted &&
+            msg.senderId.toString() !== userId.toString() &&
+            !msg.readBy.some(r => r.userId.toString() === userId.toString())
+        ).length;
+
+        res.status(200).json({
+            success: true,
+            data: { unreadCount }
+        });
+    } catch (error) {
+        console.error('Error fetching unread count:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching unread count'
+        });
+    }
+};

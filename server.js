@@ -70,6 +70,7 @@ app.use('/api/snaps', require('./src/routes/snaps'));
 app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/analytics', require('./src/routes/analytics'));
 app.use('/api/users', require('./src/routes/users'));
+app.use('/api/group-chat', require('./src/routes/groupChat'));
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
