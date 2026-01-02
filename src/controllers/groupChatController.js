@@ -131,7 +131,7 @@ exports.sendGroupMessage = async (req, res) => {
         console.log(`[GroupChat] Message request from user ${userId} to club ${clubId}`);
 
         // Normalize message type to match schema enum
-        const validTypes = ['text', 'image', 'video', 'document', 'media'];
+        const validTypes = ['text', 'image', 'video', 'document', 'media', 'file'];
         if (type && !validTypes.includes(type)) {
             type = req.file ? 'media' : 'text';
         }
