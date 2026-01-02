@@ -10,11 +10,14 @@ const {
     getConversations
 } = require('../controllers/messageController');
 
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/' });
+
 router.use(protect);
 
 router.get('/conversations/list', getConversations);
 router.get('/:userId', getMessages);
-router.post('/', sendMessage);
+router.post('/', upload.single('file'), sendMessage);
 router.put('/:userId/read', markAsRead);
 router.post('/:messageId/reaction', addReaction);
 router.delete('/:messageId', deleteMessage);

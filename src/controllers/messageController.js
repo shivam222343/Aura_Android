@@ -17,6 +17,7 @@ exports.getMessages = async (req, res) => {
                 { senderId: currentUserId, receiverId: otherUserId },
                 { senderId: otherUserId, receiverId: currentUserId }
             ],
+            deleted: { $ne: true },
             deletedFor: { $ne: currentUserId }
         })
             .sort({ createdAt: 1 })
@@ -44,32 +45,27 @@ exports.getMessages = async (req, res) => {
  */
 exports.sendMessage = async (req, res) => {
     try {
-        const { receiverId, content, type, fileUrl, clubId, replyTo, mentionAI, forwarded, isForwarded } = req.body;
+        let { receiverId, content, type, fileUrl, clubId, replyTo, mentionAI, forwarded, isForwarded } = req.body;
         const senderId = req.user._id;
 
-        // Enforce club membership check: Users must share at least one club
-        if (receiverId) {
-            const receiver = await User.findById(receiverId);
-            if (!receiver) {
-                return res.status(404).json({ success: false, message: 'Receiver not found' });
-            }
-
-            const senderClubs = (req.user.clubsJoined || []).map(c => c.clubId.toString());
-            const receiverClubs = (receiver.clubsJoined || []).map(c => c.clubId.toString());
-            const shareClub = senderClubs.some(id => receiverClubs.includes(id));
-
-            if (!shareClub && req.user.role !== 'admin') {
-                return res.status(403).json({
-                    success: false,
-                    message: "Access Denied: You can only message members of clubs you've joined."
-                });
-            }
+        // Handle file upload
+        if (req.file) {
+            const { uploadImage } = require('../config/cloudinary');
+            const result = await uploadImage(req.file.path, 'mavericks/messages');
+            fileUrl = {
+                url: result.url,
+                publicId: result.public_id,
+                fileName: req.file.originalname,
+                fileSize: req.file.size,
+                mimeType: req.file.mimetype
+            };
+            if (!type || type === 'text') type = 'media';
         }
 
         const newMessage = await Message.create({
             senderId,
             receiverId,
-            content,
+            content: content || (fileUrl ? 'Sent an attachment' : ''),
             type,
             fileUrl,
             clubId,

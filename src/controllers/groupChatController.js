@@ -26,8 +26,28 @@ exports.getGroupChat = async (req, res) => {
 
         let groupChat = await GroupChat.findOne({ clubId })
             .populate('members.userId', 'displayName profilePicture isOnline')
-            .populate('messages.senderId', 'displayName profilePicture')
             .populate('lastMessage.senderId', 'displayName profilePicture');
+
+        if (groupChat) {
+            // Filter out deleted messages or messages deleted for this user
+            groupChat.messages = groupChat.messages.filter(msg =>
+                !msg.deleted &&
+                (!msg.deletedFor || !msg.deletedFor.includes(userId))
+            );
+
+            // Populate messages after filtering (if needed) or just populate them in the query
+            // Mongoose populate on array sometimes needs careful handling after filtering
+            // But since we are populating the whole subdoc in the initial query:
+            groupChat = await GroupChat.findOne({ clubId })
+                .populate('members.userId', 'displayName profilePicture isOnline')
+                .populate('messages.senderId', 'displayName profilePicture')
+                .populate('lastMessage.senderId', 'displayName profilePicture');
+
+            groupChat.messages = groupChat.messages.filter(msg =>
+                !msg.deleted &&
+                (!msg.deletedFor || !msg.deletedFor.includes(userId))
+            );
+        }
 
         // If group chat doesn't exist, create it and add all club members
         if (!groupChat) {
@@ -231,24 +251,34 @@ exports.deleteGroupMessage = async (req, res) => {
             });
         }
 
-        // Check if user is the sender or admin
-        if (message.senderId.toString() !== userId.toString() && req.user.role !== 'admin') {
-            return res.status(403).json({
-                success: false,
-                message: 'Unauthorized to delete this message'
-            });
-        }
+        const { type } = req.query; // 'me' or 'everyone'
+        message.deleted = false; // Initial check
 
-        message.deleted = true;
-        message.deletedAt = new Date();
-        message.content = 'This message was deleted';
-        message.fileUrl = null;
+        if (type === 'everyone') {
+            // Check if user is the sender or admin
+            if (message.senderId.toString() !== userId.toString() && req.user.role !== 'admin') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Unauthorized to delete this message for everyone'
+                });
+            }
+            message.deleted = true;
+            message.deletedAt = new Date();
+            message.content = 'This message was deleted';
+            message.fileUrl = null;
+        } else {
+            // Delete for me
+            if (!message.deletedFor) message.deletedFor = [];
+            if (!message.deletedFor.includes(userId)) {
+                message.deletedFor.push(userId);
+            }
+        }
 
         await groupChat.save();
 
-        // Emit socket event
+        // Emit socket event if deleted for everyone
         const io = req.app.get('io');
-        if (io) {
+        if (io && type === 'everyone') {
             groupChat.members.forEach(member => {
                 io.to(member.userId.toString()).emit('group:message:delete', {
                     clubId,

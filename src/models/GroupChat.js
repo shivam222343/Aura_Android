@@ -36,6 +36,10 @@ const groupMessageSchema = new mongoose.Schema({
         default: false
     },
     deletedAt: Date,
+    deletedFor: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
     createdAt: {
         type: Date,
         default: Date.now
