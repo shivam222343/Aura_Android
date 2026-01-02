@@ -10,8 +10,13 @@ const { uploadImage } = require('../config/cloudinary');
  */
 exports.getGroupChat = async (req, res) => {
     try {
-        const { clubId } = req.params;
+        let { clubId } = req.params;
         const userId = req.user._id;
+
+        // Ensure clubId is a string if it's passed as an object
+        if (clubId && typeof clubId === 'object' && clubId._id) {
+            clubId = clubId._id.toString();
+        }
 
         // Check if user is a member of the club
         const user = await User.findById(userId);
@@ -114,11 +119,18 @@ exports.getGroupChat = async (req, res) => {
  */
 exports.sendGroupMessage = async (req, res) => {
     try {
-        const { clubId } = req.params;
+        let { clubId } = req.params;
         const { content, type, replyTo } = req.body;
         const userId = req.user._id;
 
+        // Ensure clubId is a string if it's passed as an object
+        if (clubId && typeof clubId === 'object' && clubId._id) {
+            clubId = clubId._id.toString();
+        }
+
         console.log(`[GroupChat] Message request from user ${userId} to club ${clubId}`);
+        console.log('[GroupChat] Request Body:', req.body);
+        console.log('[GroupChat] Request File:', req.file ? 'Present' : 'None');
 
         // Check if user is a member
         const user = await User.findById(userId);
@@ -126,7 +138,10 @@ exports.sendGroupMessage = async (req, res) => {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
 
-        const isMember = user.clubsJoined?.some(c => c.clubId?.toString() === clubId);
+        const isMember = user.clubsJoined?.some(c => {
+            const cId = c.clubId?._id || c.clubId;
+            return cId?.toString() === clubId;
+        });
 
         if (!isMember && req.user.role !== 'admin') {
             return res.status(403).json({
