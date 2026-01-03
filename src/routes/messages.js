@@ -10,8 +10,7 @@ const {
     getConversations
 } = require('../controllers/messageController');
 
-const multer = require('multer');
-const upload = multer({ dest: 'uploads/' });
+const { upload } = require('../middleware/upload');
 
 router.use(protect);
 
