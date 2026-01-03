@@ -12,8 +12,11 @@ exports.getMessages = async (req, res) => {
         const otherUserId = req.params.userId;
         const currentUserId = req.user._id;
 
+        const conversationId = [currentUserId.toString(), otherUserId.toString()].sort().join('-');
+
         const messages = await Message.find({
             $or: [
+                { conversationId },
                 { senderId: currentUserId, receiverId: otherUserId },
                 { senderId: otherUserId, receiverId: currentUserId }
             ],
@@ -64,9 +67,12 @@ exports.sendMessage = async (req, res) => {
             if (!type || type === 'text') type = 'media';
         }
 
+        const conversationId = receiverId ? [senderId.toString(), receiverId.toString()].sort().join('-') : null;
+
         const newMessage = await Message.create({
             senderId,
             receiverId,
+            conversationId,
             content: content || (fileUrl ? 'Sent an attachment' : ''),
             type,
             fileUrl,

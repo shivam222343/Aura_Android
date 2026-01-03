@@ -14,6 +14,10 @@ const messageSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Club'
     },
+    conversationId: {
+        type: String, // format: min(id1, id2)-max(id1, id2)
+        index: true
+    },
     content: {
         type: String,
         trim: true
