@@ -37,34 +37,38 @@ exports.getGroupChat = async (req, res) => {
             .populate('lastMessage.senderId', 'displayName profilePicture');
 
         if (groupChat) {
-            // Function to find message by ID and return populated-like object
+            // Convert entire document to object first to preserve all populations
+            const groupChatObj = groupChat.toObject();
+
+            // Function to find message by ID and return populated-like object (working on plain objects now)
             const getPopulatedReply = (replyId) => {
                 if (!replyId) return null;
-                const replyMsg = groupChat.messages.id(replyId);
+                // Find in the plain array
+                const replyMsg = groupChatObj.messages.find(m => m._id.toString() === replyId.toString());
                 if (!replyMsg) return null;
 
-                // Find sender info from populated members or messages
-                const sender = groupChat.messages.find(m => m.senderId && (m.senderId._id?.toString() === replyMsg.senderId.toString() || m.senderId.toString() === replyMsg.senderId.toString()))?.senderId;
+                // Find sender info
+                const sender = groupChatObj.messages.find(m => m.senderId && (m.senderId._id?.toString() === replyMsg.senderId.toString() || m.senderId.toString() === replyMsg.senderId.toString()))?.senderId;
 
                 return {
-                    ...replyMsg.toObject(),
+                    ...replyMsg,
                     senderId: sender || { displayName: 'Member' }
                 };
             };
 
             // Manually populate replyTo for filtered messages
-            const filteredMessages = groupChat.messages.filter(msg =>
+            const filteredMessages = groupChatObj.messages.filter(msg =>
                 !msg.deleted &&
-                (!msg.deletedFor || !msg.deletedFor.includes(userId))
+                (!msg.deletedFor || !msg.deletedFor.map(id => id.toString()).includes(userId.toString()))
             ).map(msg => {
-                const msgObj = msg.toObject();
-                if (msgObj.replyTo) {
-                    msgObj.replyTo = getPopulatedReply(msgObj.replyTo);
+                // msg is already a plain object
+                if (msg.replyTo) {
+                    msg.replyTo = getPopulatedReply(msg.replyTo);
                 }
-                return msgObj;
+                return msg;
             });
 
-            groupChat = groupChat.toObject();
+            groupChat = groupChatObj;
             groupChat.messages = filteredMessages;
         }
 
@@ -452,7 +456,7 @@ exports.addReaction = async (req, res) => {
             io.to(`club:${clubId}`).emit('group:message:reaction', {
                 clubId,
                 messageId,
-                reactions: populatedMessage.reactions
+                reactions: populatedMessage.toObject().reactions
             });
         }
 
