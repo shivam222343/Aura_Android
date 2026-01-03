@@ -23,7 +23,8 @@ exports.getMessages = async (req, res) => {
             .sort({ createdAt: 1 })
             .populate('senderId', 'displayName profilePicture')
             .populate('receiverId', 'displayName profilePicture')
-            .populate('replyTo');
+            .populate('replyTo')
+            .populate('reactions.userId', 'displayName profilePicture');
 
         res.status(200).json({
             success: true,
@@ -50,11 +51,11 @@ exports.sendMessage = async (req, res) => {
 
         // Handle file upload
         if (req.file) {
-            const { uploadImage } = require('../config/cloudinary');
-            const result = await uploadImage(req.file.path, 'mavericks/messages');
+            const { uploadImageBuffer } = require('../config/cloudinary');
+            const result = await uploadImageBuffer(req.file.buffer, 'mavericks/messages');
             fileUrl = {
                 url: result.url,
-                publicId: result.public_id,
+                publicId: result.publicId,
                 fileName: req.file.originalname,
                 fileSize: req.file.size,
                 mimeType: req.file.mimetype
@@ -78,7 +79,8 @@ exports.sendMessage = async (req, res) => {
         const populatedMessage = await Message.findById(newMessage._id)
             .populate('senderId', 'displayName profilePicture')
             .populate('receiverId', 'displayName profilePicture')
-            .populate('replyTo');
+            .populate('replyTo')
+            .populate('reactions.userId', 'displayName profilePicture');
 
         // Socket.io event
         const io = req.app.get('io');
@@ -216,15 +218,18 @@ exports.addReaction = async (req, res) => {
 
         await message.save();
 
+        const populatedMessage = await Message.findById(message._id)
+            .populate('reactions.userId', 'displayName profilePicture');
+
         const io = req.app.get('io');
         if (io) {
             const room = [message.senderId.toString(), message.receiverId.toString()];
-            room.forEach(r => io.to(r).emit('message:reaction', { messageId, reactions: message.reactions }));
+            room.forEach(r => io.to(r).emit('message:reaction', { messageId, reactions: populatedMessage.reactions }));
         }
 
         res.status(200).json({
             success: true,
-            data: message.reactions
+            data: populatedMessage.reactions
         });
     } catch (error) {
         console.error('Error adding reaction:', error);

@@ -1,7 +1,7 @@
 const GroupChat = require('../models/GroupChat');
 const Club = require('../models/Club');
 const User = require('../models/User');
-const { uploadImage } = require('../config/cloudinary');
+const { uploadImageBuffer } = require('../config/cloudinary');
 
 /**
  * @desc    Get group chat for a club
@@ -170,7 +170,7 @@ exports.sendGroupMessage = async (req, res) => {
 
         if (req.file) {
             try {
-                const result = await uploadImage(req.file.path, 'mavericks/group-chat');
+                const result = await uploadImageBuffer(req.file.buffer, 'mavericks/group-chat');
                 fileUrl = result.url;
                 fileName = req.file.originalname;
                 fileSize = req.file.size;

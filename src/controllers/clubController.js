@@ -1,6 +1,6 @@
 const Club = require('../models/Club');
 const User = require('../models/User');
-const { uploadImage } = require('../config/cloudinary');
+const { uploadImageBuffer } = require('../config/cloudinary');
 
 /**
  * @desc    Get all clubs
@@ -44,7 +44,7 @@ exports.createClub = async (req, res) => {
 
         // Handle image upload if provided
         if (req.file) {
-            const result = await uploadImage(req.file.path, 'mavericks/clubs');
+            const result = await uploadImageBuffer(req.file.buffer, 'mavericks/clubs');
             logo = {
                 url: result.url,
                 publicId: result.publicId
@@ -111,7 +111,7 @@ exports.updateClub = async (req, res) => {
         // Handle Image Upload
         if (req.file) {
             try {
-                const result = await uploadImage(req.file.path, 'mavericks/clubs');
+                const result = await uploadImageBuffer(req.file.buffer, 'mavericks/clubs');
                 club.logo = {
                     url: result.url,
                     publicId: result.publicId
