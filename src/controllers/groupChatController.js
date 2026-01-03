@@ -240,6 +240,25 @@ exports.sendGroupMessage = async (req, res) => {
             success: true,
             data: populatedMessage
         });
+
+        // Handle AI Mention asynchronously
+        if (content && /@Eta/i.test(content)) {
+            console.log(`[GroupChat] AI Mention detected in club ${clubId}`);
+            const aiController = require('./aiController');
+
+            const aiResponse = await aiController.handleGroupAIMention(
+                clubId,
+                groupChat,
+                lastSavedMessage
+            );
+
+            if (aiResponse && io) {
+                io.to(`club:${clubId}`).emit('group:message', {
+                    clubId,
+                    message: aiResponse
+                });
+            }
+        }
     } catch (error) {
         console.error('[GroupChat] Error sending message:', error);
         res.status(500).json({

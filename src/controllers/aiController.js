@@ -15,37 +15,36 @@ const groq = new Groq({
 exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) => {
     try {
         const apiKey = process.env.GROQ_API_KEY;
-        console.log(`[AI] Config Check - Key Exists: ${!!apiKey}`);
 
         if (!apiKey) {
-            console.error('GROQ_API_KEY is not defined in environment variables');
-            return "I'm currently under maintenance (Missing Configuration). Please try again later.";
+            console.error('[AI] GROQ_API_KEY missing');
+            return "I'm currently offline (Missing API Key).";
         }
 
-        console.log(`[AI] Generating response for: "${userMessage}"`);
+        console.log(`[AI] Generating response for: "${userMessage?.substring(0, 50)}..."`);
 
-        // Build context from chat history
         const messages = [
             {
                 role: 'system',
-                content: `You are Eta, a helpful AI assistant in a club management chat app called Mavericks. 
-                Keep responses SHORT and CONCISE (1-3 sentences max). 
-                Be friendly, helpful, and remember the conversation context.
-                Focus on being practical and to-the-point.
-                If asked about club activities, meetings, or tasks, provide brief, actionable advice.`
+                content: `You are Eta, the official AI assistant for the Mavericks club management platform.
+                
+                YOUR GUIDELINES:
+                1. Context: You are in a chat with club members (students/alumni).
+                2. Style: Friendly, professional, and helpful.
+                3. Length: CRITICAL! Keep responses extremely SHORT (1-2 sentences). Never exceed 50 words.
+                4. Content: Assist with club coordination, tasks, meetings, or general queries.
+                5. Identity: You are Eta, not an LLM. Don't mention you are an AI unless asked.`
             }
         ];
 
         // Add recent chat history for context (last 10 messages)
-        // ... (rest of the history logic is fine, preserving it implicitly by just wrapping the try/catch block if I replaced the whole function, 
-        // but here I am replacing the whole function so I must re-include logic)
-
         const recentHistory = chatHistory.slice(-10);
         recentHistory.forEach(msg => {
             if (msg.content && !msg.deleted) {
-                const role = msg.isAI ? 'assistant' : 'user';
+                // Check if message is from AI (either isAI flag or special senderId)
+                const isAI = msg.isAI || msg.senderId?.toString() === '000000000000000000000000';
                 messages.push({
-                    role: role,
+                    role: isAI ? 'assistant' : 'user',
                     content: msg.content.replace(/@Eta/i, '').trim()
                 });
             }
@@ -57,36 +56,35 @@ exports.getAIResponse = async (conversationId, userMessage, chatHistory = []) =>
             content: userMessage.replace(/@Eta/i, '').trim()
         });
 
-        console.log(`[AI] Sending ${messages.length} messages to Groq...`);
-
-        // Call Groq API
         const completion = await groq.chat.completions.create({
             messages: messages,
             model: 'llama-3.3-70b-versatile',
-            temperature: 0.7,
-            max_tokens: 150, // Keep responses short
-            top_p: 1,
+            temperature: 0.6,
+            max_tokens: 100,
+            top_p: 0.9,
         });
 
-        const responseText = completion.choices[0]?.message?.content;
-        console.log(`[AI] Response: "${responseText?.substring(0, 50)}..."`);
+        let responseText = completion.choices[0]?.message?.content?.trim();
 
-        return responseText || "I'm here to help! Could you rephrase that?";
+        // Final length safety check
+        if (responseText && responseText.length > 300) {
+            responseText = responseText.substring(0, 297) + "...";
+        }
+
+        return responseText || "I'm here to help! What's on your mind?";
     } catch (error) {
-        console.error('Groq AI Error:', error.message);
-        return "Sorry, I'm having trouble responding right now. Please try again!";
+        console.error('[AI] Groq Error:', error.message);
+        return "I'm having a bit of trouble connecting to my brain. Try again in a second!";
     }
 };
 
 /**
- * @desc    Handle AI mention in message
- * @route   Called internally when @Eta is mentioned
+ * @desc    Handle AI mention in Private Message
  */
 exports.handleAIMention = async (senderId, receiverId, conversationMessages, mentionedMessage) => {
     try {
-        console.log(`[AI] Handling mention from ${senderId} in conversation with ${receiverId}`);
+        console.log(`[AI] Private Mention: ${senderId} -> AI`);
 
-        // Get AI response
         const conversationId = [senderId.toString(), receiverId.toString()].sort().join('-');
         const aiResponse = await exports.getAIResponse(
             conversationId,
@@ -94,15 +92,10 @@ exports.handleAIMention = async (senderId, receiverId, conversationMessages, men
             conversationMessages
         );
 
-        if (!aiResponse) {
-            console.error('[AI] Failed to get AI response');
-            return null;
-        }
+        if (!aiResponse) return null;
 
-        // Create AI message
-        console.log('[AI] Creating message in database...');
         const aiMessage = await Message.create({
-            senderId: '000000000000000000000000', // Special valid ObjectId for AI
+            senderId: '000000000000000000000000',
             receiverId: senderId,
             content: aiResponse,
             type: 'text',
@@ -110,14 +103,62 @@ exports.handleAIMention = async (senderId, receiverId, conversationMessages, men
             replyTo: mentionedMessage._id
         });
 
-        const populatedMessage = await Message.findById(aiMessage._id)
-            .populate('replyTo');
-
-        console.log(`[AI] AI message created and populated: ${aiMessage._id}`);
-        return populatedMessage;
+        return await Message.findById(aiMessage._id).populate('replyTo');
     } catch (error) {
-        console.error('Error handling AI mention:', error);
-        console.error('Error stack:', error.stack);
+        console.error('[AI] Private Hint Error:', error);
+        return null;
+    }
+};
+
+/**
+ * @desc    Handle AI mention in Group Chat
+ */
+exports.handleGroupAIMention = async (clubId, groupChat, mentionedMessage) => {
+    try {
+        console.log(`[AI] Group Mention in Club: ${clubId}`);
+
+        // Get recent messages for context
+        const lastMessages = groupChat.messages.slice(-15);
+
+        const aiResponse = await exports.getAIResponse(
+            `group-${clubId}`,
+            mentionedMessage.content,
+            lastMessages
+        );
+
+        if (!aiResponse) return null;
+
+        // In GroupChat, messages are subdocuments
+        const aiMessage = {
+            senderId: '000000000000000000000000',
+            content: aiResponse,
+            type: 'text',
+            isAI: true,
+            replyTo: mentionedMessage._id,
+            createdAt: new Date()
+        };
+
+        groupChat.messages.push(aiMessage);
+        groupChat.lastMessage = {
+            senderId: '000000000000000000000000',
+            content: aiResponse,
+            createdAt: new Date()
+        };
+
+        await groupChat.save();
+
+        const savedMsg = groupChat.messages[groupChat.messages.length - 1];
+
+        return {
+            ...savedMsg.toObject(),
+            senderId: {
+                _id: '000000000000000000000000',
+                displayName: 'Eta (AI)',
+                profilePicture: null
+            }
+        };
+    } catch (error) {
+        console.error('[AI] Group Hint Error:', error);
         return null;
     }
 };

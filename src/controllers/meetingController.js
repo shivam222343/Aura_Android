@@ -101,6 +101,9 @@ exports.createMeeting = async (req, res) => {
                 })
             );
             await Promise.all(notificationPromises);
+
+            // Signal each member to refresh their notification count via socket
+            members.forEach(member => emitToUser(req, member._id, 'notification_receive', {}));
         } catch (notifyError) {
             console.error('Failed to create notifications for meeting:', notifyError);
             // Don't fail the meeting creation if notification fails

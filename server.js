@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const connectDB = require('./src/config/database');
 const { sendPushNotification } = require('./src/utils/pushNotifications');
+const { initReminderService } = require('./src/services/reminderService');
 
 // Initialize Express app
 const app = express();
@@ -200,6 +201,9 @@ server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🤖 Groq AI: ${process.env.GROQ_API_KEY ? 'Enabled ✅' : 'Disabled (Missing Key) ❌'}`);
+
+    // Initialize background services
+    initReminderService(app);
 });
 
 // Handle unhandled promise rejections

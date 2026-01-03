@@ -50,6 +50,22 @@ exports.createTask = async (req, res) => {
                 body: `New task: ${title}. Due by ${new Date(dueDate).toLocaleDateString()}`,
                 data: { taskId: task._id.toString() }
             });
+
+            // Real-time socket signal
+            const io = req.app.get('io');
+            if (io) {
+                // Signal each attendee for the notification badge
+                assignedTo.forEach(userId => {
+                    io.to(userId.toString()).emit('notification_receive', {});
+                });
+
+                // Broadcast task update to the club room
+                const populatedNewTask = await Task.findById(task._id)
+                    .populate('assignedTo.user', 'displayName profilePicture')
+                    .populate('assignedBy', 'displayName')
+                    .populate('meetingId', 'name date');
+                io.to(`club:${task.clubId}`).emit('task_update', populatedNewTask);
+            }
         } catch (notifErr) {
             console.error('Task notification error:', notifErr);
         }
@@ -127,8 +143,21 @@ exports.updateTaskStatus = async (req, res) => {
 
         await task.save();
 
-        res.status(200).json({ success: true, data: task });
+        // Populate to ensure UI has user data
+        const populatedTask = await Task.findById(task._id)
+            .populate('assignedTo.user', 'displayName profilePicture')
+            .populate('assignedBy', 'displayName')
+            .populate('meetingId', 'name date');
+
+        // Emit socket event for real-time updates
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${task.clubId}`).emit('task_update', populatedTask);
+        }
+
+        res.status(200).json({ success: true, data: populatedTask });
     } catch (error) {
+        console.error('Update task status error:', error);
         res.status(500).json({ success: false, message: 'Server error' });
     }
 };
