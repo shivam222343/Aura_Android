@@ -49,19 +49,23 @@ const upload = multer({
 
 // Media filter (Images & Videos)
 const mediaFilter = (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp|mp4|mov|avi|wmv|flv|mkv/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/');
+    const allowedExtensions = /jpeg|jpg|png|gif|webp|mp4|mov|avi|wmv|flv|mkv/i;
+    // Allow if extension matches OR if it's a blob/file without extension but has correct mimetype
+    const extname = path.extname(file.originalname).toLowerCase();
+    const hasAllowedExt = allowedExtensions.test(extname);
+    // Be more permissive with mimetypes
+    const isImage = file.mimetype.startsWith('image/');
+    const isVideo = file.mimetype.startsWith('video/');
 
-    if (extname && mimetype) {
+    // If it has a valid extension OR a valid mimetype, let it pass.
+    // Sometimes blobs don't have extensions.
+    if (hasAllowedExt || isImage || isVideo) {
         return cb(null, true);
     } else {
         console.log('File rejected by mediaFilter:', {
             originalname: file.originalname,
             mimetype: file.mimetype,
-            ext: path.extname(file.originalname).toLowerCase(),
-            extMatch: extname,
-            mimeMatch: mimetype
+            ext: extname
         });
         cb(new Error(`Invalid file type (${file.mimetype}). Only images and videos are allowed.`));
     }
