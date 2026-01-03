@@ -51,6 +51,7 @@ exports.sendMessage = async (req, res) => {
 
         // Handle file upload
         if (req.file) {
+            console.log(`[MessageController] Processing incoming file: ${req.file.originalname} (${req.file.size} bytes)`);
             const { uploadImageBuffer } = require('../config/cloudinary');
             const result = await uploadImageBuffer(req.file.buffer, 'mavericks/messages');
             fileUrl = {

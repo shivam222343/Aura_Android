@@ -43,6 +43,16 @@ app.use(helmet({
 }));
 app.use(morgan('dev'));
 app.use(compression());
+
+// Request logging for debugging Android reachability
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    if (req.method === 'POST' && req.headers['content-type']?.includes('multipart/form-data')) {
+        console.log('Incoming Multipart Request - Content-Length:', req.headers['content-length']);
+    }
+    next();
+});
+
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ extended: true, limit: '200mb' }));
 
