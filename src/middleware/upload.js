@@ -30,7 +30,9 @@ const imageFilter = (req, file, cb) => {
         console.log('File rejected by imageFilter:', {
             originalname: file.originalname,
             mimetype: file.mimetype,
-            ext: path.extname(file.originalname).toLowerCase()
+            ext: path.extname(file.originalname).toLowerCase(),
+            extMatch: extname,
+            mimeMatch: mimetype
         });
         cb(new Error(`Invalid file type (${file.mimetype}). Only images are allowed.`));
     }
@@ -57,7 +59,9 @@ const mediaFilter = (req, file, cb) => {
         console.log('File rejected by mediaFilter:', {
             originalname: file.originalname,
             mimetype: file.mimetype,
-            ext: path.extname(file.originalname).toLowerCase()
+            ext: path.extname(file.originalname).toLowerCase(),
+            extMatch: extname,
+            mimeMatch: mimetype
         });
         cb(new Error(`Invalid file type (${file.mimetype}). Only images and videos are allowed.`));
     }

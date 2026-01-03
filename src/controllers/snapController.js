@@ -11,6 +11,16 @@ const Club = require('../models/Club');
  */
 exports.uploadSnap = async (req, res) => {
     try {
+        console.log('[SnapController] Upload attempt:', {
+            body: req.body,
+            file: req.file ? {
+                fieldname: req.file.fieldname,
+                originalname: req.file.originalname,
+                mimetype: req.file.mimetype,
+                size: req.file.size
+            } : 'No file received'
+        });
+
         const { clubId, caption, type, recipients } = req.body;
         const senderId = req.user._id;
 

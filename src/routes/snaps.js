@@ -14,7 +14,7 @@ const {
 
 router.use(protect);
 
-router.post('/', uploadMedia.single('image'), handleMulterError, uploadSnap);
+router.post('/', uploadMedia.single('file'), handleMulterError, uploadSnap);
 router.get('/my-clubs', getMySnaps);
 router.get('/club/:clubId', getClubSnaps);
 router.post('/:snapId/view', viewSnap);
