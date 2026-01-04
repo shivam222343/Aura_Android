@@ -220,8 +220,11 @@ exports.updateProfile = async (req, res) => {
         if (branch) user.branch = branch;
         if (passoutYear) user.passoutYear = passoutYear;
 
-        // Support updating profile picture via URL directly (e.g. from AI avatars or History)
-        if (req.body.profilePictureUrl) {
+        // Support updating profile picture via URL directly (e.g. from AI avatars or History or Web Upload)
+        if (req.body.profilePictureUrl || req.body.imageUrl) {
+            const url = req.body.profilePictureUrl || req.body.imageUrl;
+            const publicId = req.body.publicId || 'ai-generated';
+
             // Save current pic to history if it valid
             if (user.profilePicture && user.profilePicture.url && !user.profilePicture.url.includes('dicebear')) {
                 // Avoid duplicates at the top of the stack
@@ -239,10 +242,11 @@ exports.updateProfile = async (req, res) => {
             }
 
             user.profilePicture = {
-                url: req.body.profilePictureUrl,
-                publicId: 'ai-generated' // Marker for non-cloudinary images
+                url: url,
+                publicId: publicId
             };
         }
+
 
         await user.save();
 

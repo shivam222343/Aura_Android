@@ -25,7 +25,7 @@ exports.getAllClubs = async (req, res) => {
 
 exports.createClub = async (req, res) => {
     try {
-        const { name, description } = req.body;
+        const { name, description, logoUrl, publicId } = req.body;
         // req.file contains the image if using multer
 
         // Check if club exists
@@ -38,8 +38,8 @@ exports.createClub = async (req, res) => {
         }
 
         let logo = {
-            url: 'https://via.placeholder.com/150',
-            publicId: null
+            url: logoUrl || 'https://via.placeholder.com/150',
+            publicId: publicId || null
         };
 
         // Handle image upload if provided
@@ -50,6 +50,7 @@ exports.createClub = async (req, res) => {
                 publicId: result.publicId
             };
         }
+
 
         const club = await Club.create({
             name,
@@ -104,7 +105,7 @@ exports.updateClub = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Not authorized to update this club' });
         }
 
-        const { name, description } = req.body;
+        const { name, description, logoUrl, publicId } = req.body;
         if (name) club.name = name;
         if (description) club.description = description;
 
@@ -120,7 +121,13 @@ exports.updateClub = async (req, res) => {
                 console.error('Cloudinary upload error:', err);
                 return res.status(500).json({ success: false, message: 'Image upload failed' });
             }
+        } else if (logoUrl) {
+            club.logo = {
+                url: logoUrl,
+                publicId: publicId || ''
+            };
         }
+
 
         await club.save();
 

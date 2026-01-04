@@ -23,21 +23,28 @@ exports.uploadImage = async (req, res) => {
             } : 'No file'
         });
 
-        const { title, description, clubId, category, tags } = req.body;
+        const { title, description, clubId, category, tags, imageUrl, publicId } = req.body;
 
-        if (!req.file) {
-            return res.status(400).json({ success: false, message: 'Please upload an image' });
+        if (!req.file && !imageUrl) {
+            return res.status(400).json({ success: false, message: 'Please upload an image or provide a URL' });
         }
 
         // Validate clubId if provided (ensure it's not "null" or empty string)
         const validClubId = clubId && mongoose.Types.ObjectId.isValid(clubId) ? clubId : undefined;
 
-        // Upload to Cloudinary using buffer
-        const result = await uploadToCloudinary(req.file.buffer, 'gallery');
+        let finalImageUrl = imageUrl;
+        let finalPublicId = publicId;
+
+        if (req.file) {
+            // Upload to Cloudinary using buffer
+            const result = await uploadToCloudinary(req.file.buffer, 'gallery');
+            finalImageUrl = result.url;
+            finalPublicId = result.publicId;
+        }
 
         const newImage = await Gallery.create({
-            imageUrl: result.url,
-            publicId: result.publicId,
+            imageUrl: finalImageUrl,
+            publicId: finalPublicId,
             title,
             description,
             uploadedBy: req.user._id,

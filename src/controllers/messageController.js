@@ -49,7 +49,7 @@ exports.getMessages = async (req, res) => {
  */
 exports.sendMessage = async (req, res) => {
     try {
-        let { receiverId, content, type, fileUrl, clubId, replyTo, mentionAI, forwarded, isForwarded } = req.body;
+        let { receiverId, content, type, fileUrl, publicId, fileName, clubId, replyTo, mentionAI, forwarded, isForwarded } = req.body;
         const senderId = req.user._id;
 
         // Handle file upload
@@ -65,7 +65,18 @@ exports.sendMessage = async (req, res) => {
                 mimeType: req.file.mimetype
             };
             if (!type || type === 'text') type = 'media';
+        } else if (fileUrl && typeof fileUrl === 'string') {
+            // Support for web-uploaded files
+            fileUrl = {
+                url: fileUrl,
+                publicId: publicId || '',
+                fileName: fileName || 'Attachment',
+                fileSize: 0,
+                mimeType: 'image/jpeg'
+            };
+            if (!type || type === 'text') type = 'media';
         }
+
 
         const conversationId = receiverId ? [senderId.toString(), receiverId.toString()].sort().join('-') : null;
 

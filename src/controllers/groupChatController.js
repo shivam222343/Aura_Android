@@ -168,9 +168,10 @@ exports.sendGroupMessage = async (req, res) => {
         }
 
         // Handle file upload if present
-        let fileUrl = null;
-        let fileName = null;
-        let fileSize = null;
+        let fileUrl = req.body.fileUrl || null;
+        let fileName = req.body.fileName || null;
+        let fileSize = req.body.fileSize || null;
+        let publicId = req.body.publicId || null;
 
         if (req.file) {
             try {
@@ -178,6 +179,7 @@ exports.sendGroupMessage = async (req, res) => {
                 fileUrl = result.url;
                 fileName = req.file.originalname;
                 fileSize = req.file.size;
+                publicId = result.publicId;
             } catch (uploadError) {
                 console.error('[GroupChat] Cloudinary upload error:', uploadError);
                 return res.status(500).json({ success: false, message: 'Failed to upload attachment' });
@@ -188,12 +190,17 @@ exports.sendGroupMessage = async (req, res) => {
             senderId: userId,
             content: content || (fileUrl ? 'Sent an attachment' : ''),
             type: type || (fileUrl ? 'media' : 'text'),
-            fileUrl,
-            fileName,
-            fileSize,
+            fileUrl: fileUrl ? {
+                url: typeof fileUrl === 'string' ? fileUrl : fileUrl.url,
+                publicId: publicId || (typeof fileUrl === 'object' ? fileUrl.publicId : null),
+                fileName: fileName || (typeof fileUrl === 'object' ? fileUrl.fileName : 'Attachment'),
+                fileSize: fileSize || (typeof fileUrl === 'object' ? fileUrl.fileSize : 0),
+                mimeType: (typeof fileUrl === 'object' ? fileUrl.mimeType : 'image/jpeg')
+            } : null,
             replyTo: (replyTo && replyTo !== 'null' && replyTo !== '') ? replyTo : undefined,
             createdAt: new Date()
         };
+
 
         groupChat.messages.push(newMessage);
 

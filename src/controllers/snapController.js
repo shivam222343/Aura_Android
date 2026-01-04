@@ -21,12 +21,8 @@ exports.uploadSnap = async (req, res) => {
             } : 'No file received'
         });
 
-        const { clubId, caption, type, recipients } = req.body;
+        const { clubId, caption, type, recipients, imageUrl, publicId } = req.body;
         const senderId = req.user._id;
-
-        if (!req.file) {
-            return res.status(400).json({ success: false, message: 'Please upload an image/video' });
-        }
 
         let recipientsList = [];
         if (recipients) {
@@ -40,7 +36,16 @@ exports.uploadSnap = async (req, res) => {
             }
         }
 
-        const result = await uploadImageBuffer(req.file.buffer, 'mavericks/snaps');
+        let result = null;
+        if (req.file) {
+            result = await uploadImageBuffer(req.file.buffer, 'mavericks/snaps');
+        } else if (imageUrl) {
+            result = { url: imageUrl, publicId: publicId || '' };
+        } else {
+            return res.status(400).json({ success: false, message: 'Please upload an image/video or provide a URL' });
+        }
+
+
 
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + 24);
