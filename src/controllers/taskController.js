@@ -10,7 +10,7 @@ const { sendPushNotificationToMany } = require('../utils/pushNotifications');
  */
 exports.createTask = async (req, res) => {
     try {
-        const { title, description, clubId, assignedTo, dueDate, priority, meetingId } = req.body;
+        const { title, description, clubId, assignedTo, dueDate, priority, meetingId, attachments } = req.body;
 
         if (!assignedTo || !Array.isArray(assignedTo) || assignedTo.length === 0) {
             return res.status(400).json({ success: false, message: 'At least one assignee is required' });
@@ -30,6 +30,7 @@ exports.createTask = async (req, res) => {
             dueDate,
             priority,
             meetingId,
+            attachments,
             assignedBy: req.user._id
         });
 

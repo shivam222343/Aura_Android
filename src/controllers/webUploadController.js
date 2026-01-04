@@ -8,7 +8,7 @@ const User = require('../models/User');
  * @access  Private (via Token)
  */
 exports.renderUploadPage = async (req, res) => {
-    const { token, type, clubId, messageType } = req.query;
+    const { token, type, clubId, messageType, redirectUrl } = req.query;
 
     const html = `
 <!DOCTYPE html>
@@ -141,6 +141,7 @@ exports.renderUploadPage = async (req, res) => {
             align-items: center;
             justify-content: center;
             gap: 8px;
+            text-decoration: none;
         }
 
         .btn:disabled {
@@ -154,14 +155,51 @@ exports.renderUploadPage = async (req, res) => {
 
         #status {
             margin-top: 20px;
+            margin-bottom: 10px;
             font-size: 14px;
+            display: none;
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        #status.success { 
+            color: var(--success); 
+            background: #E6F4EA;
+            display: block; 
+        }
+        #status.error { 
+            color: var(--error); 
+            background: #FCE8E6;
+            display: block; 
+        }
+
+        .progress-container {
+            margin-top: 20px;
             display: none;
         }
 
-        #status.success { color: var(--success); display: block; }
-        #status.error { color: var(--error); display: block; }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #E0E0E0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
 
-        .loader {
+        .progress-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+
+        .progress-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .loader-spin {
             width: 20px;
             height: 20px;
             border: 2px solid #FFF;
@@ -187,6 +225,19 @@ exports.renderUploadPage = async (req, res) => {
             text-transform: uppercase;
             margin-bottom: 16px;
         }
+
+        #return-btn {
+            margin-top: 20px;
+            background: #6B7280;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #return-btn:hover {
+            background: #4B5563;
+        }
     </style>
 </head>
 <body>
@@ -199,7 +250,7 @@ exports.renderUploadPage = async (req, res) => {
         <p>Choose a photo or video to upload to Mavericks.</p>
 
         <form id="uploadForm">
-            <div class="upload-area">
+            <div class="upload-area" id="dropArea">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#0A66C2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 <span>Tap to browse files</span>
                 <input type="file" id="fileInput" name="file" accept="image/*,video/*" required>
@@ -207,12 +258,21 @@ exports.renderUploadPage = async (req, res) => {
             </div>
 
             <button type="submit" id="submitBtn" class="btn">
-                <span class="loader" id="loader"></span>
+                <span class="loader-spin" id="loader"></span>
                 <span id="btnText">Upload Media</span>
             </button>
         </form>
 
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">0%</div>
+        </div>
+
         <div id="status"></div>
+
+        <a href="${redirectUrl || 'mavericks://upload-success'}" id="return-btn" class="btn">Cancel & Return</a>
     </div>
 
     <script>
@@ -224,6 +284,10 @@ exports.renderUploadPage = async (req, res) => {
         const loader = document.getElementById('loader');
         const btnText = document.getElementById('btnText');
         const status = document.getElementById('status');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const returnBtn = document.getElementById('return-btn');
 
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
@@ -234,60 +298,101 @@ exports.renderUploadPage = async (req, res) => {
             }
         });
 
-        form.addEventListener('submit', async (e) => {
+        form.addEventListener('submit', (e) => {
             e.preventDefault();
             
             if (!fileInput.files.length) return;
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('type', "${type || ''}");
+            formData.append('clubId', "${clubId || ''}");
+            formData.append('messageType', "${messageType || ''}");
 
             // UI State
             submitBtn.disabled = true;
             loader.style.display = 'inline-block';
             btnText.textContent = 'Uploading...';
             status.style.display = 'none';
+            progressContainer.style.display = 'block';
 
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            formData.append('type', "${type || ''}");
-            formData.append('clubId', "${clubId || ''}");
-            formData.append('messageType', "${messageType || ''}");
+            const xhr = new XMLHttpRequest();
 
-            try {
-                const response = await fetch('/api/web-upload', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ${token}'
-                    },
-                    body: formData
-                });
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    progressFill.style.width = percent + '%';
+                    progressText.textContent = percent + '%';
+                }
+            });
 
-                const result = await response.json();
-
-                if (result.success) {
-                    status.textContent = 'Upload successful! Redirecting...';
+            xhr.addEventListener('load', () => {
+                const result = JSON.parse(xhr.responseText);
+                
+                if (xhr.status >= 200 && xhr.status < 300 && result.success) {
+                    status.textContent = 'Upload successful! Returning to app...';
                     status.className = 'success';
-                    
-                    // Signal back to app
+                    btnText.textContent = 'Success!';
+                    loader.style.display = 'none';
+
                     const mediaUrl = encodeURIComponent(result.data.url);
                     const publicId = encodeURIComponent(result.data.publicId || '');
-                    
-                    // Redirect to app scheme
+                    const baseUrl = "${redirectUrl || 'mavericks://upload-success'}";
+                    const separator = baseUrl.includes('?') ? '&' : '?';
+                    const deepLink = baseUrl + separator + "url=" + mediaUrl + "&publicId=" + publicId;
+
+                    // Update Return Button
+                    returnBtn.href = deepLink;
+                    returnBtn.style.display = 'flex';
+
+                    // Automatic redirect
                     setTimeout(() => {
-                        window.location.href = "mavericks://upload-success?url=" + mediaUrl + "&publicId=" + publicId;
-                    }, 1000);
+                        window.location.href = deepLink;
+                    }, 1500);
                 } else {
-                    throw new Error(result.message || 'Upload failed');
+                    handleError(result.message || 'Server error occurred');
                 }
-            } catch (err) {
-                status.textContent = err.message;
+            });
+
+            xhr.addEventListener('error', () => {
+                handleError('Network error occurred. Please check your connection.');
+            });
+
+            xhr.open('POST', '/api/web-upload');
+            xhr.setRequestHeader('Authorization', 'Bearer ${token}');
+            xhr.send(formData);
+
+            function handleError(msg) {
+                status.textContent = "Error: " + msg;
                 status.className = 'error';
                 submitBtn.disabled = false;
                 loader.style.display = 'none';
                 btnText.textContent = 'Try Again';
+                progressContainer.style.display = 'none';
+
+                // Allow returning with error
+                const baseUrl = "${redirectUrl || 'mavericks://upload-success'}";
+                const separator = baseUrl.includes('?') ? '&' : '?';
+                const errorLink = baseUrl + separator + "error=" + encodeURIComponent(msg);
+                returnBtn.href = errorLink;
+                returnBtn.textContent = 'Return to App (with error)';
+                returnBtn.style.display = 'flex';
+            }
+        });
+
+        // Handle Cancel
+        document.getElementById('return-btn').addEventListener('click', (e) => {
+            if (!e.target.href.includes('url=') && !e.target.href.includes('error=')) {
+                const baseUrl = "${redirectUrl || 'mavericks://upload-success'}";
+                const separator = baseUrl.includes('?') ? '&' : '?';
+                e.target.href = baseUrl + separator + "status=cancelled";
             }
         });
     </script>
 </body>
 </html>
+
     `;
 
     res.send(html);

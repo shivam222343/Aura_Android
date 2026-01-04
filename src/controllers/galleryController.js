@@ -113,6 +113,8 @@ exports.getGalleryImages = async (req, res) => {
 
         const images = await Gallery.find(query)
             .populate('uploadedBy', 'displayName profilePicture')
+            .populate('comments.user', 'displayName profilePicture')
+            .populate('clubId', 'name')
             .sort({ createdAt: -1 });
 
         res.status(200).json({
