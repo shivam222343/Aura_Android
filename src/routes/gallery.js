@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
     uploadImage,
+    uploadBase64Image,
     getGalleryImages,
     updateImageStatus,
     toggleLike,
@@ -16,6 +17,8 @@ const { uploadImage: uploadMiddleware } = require('../middleware/upload');
 router.route('/')
     .get(protect, getGalleryImages)
     .post(protect, uploadMiddleware.single('image'), uploadImage);
+
+router.post('/upload-base64', protect, uploadBase64Image);
 
 router.route('/:id')
     .put(protect, updateImage)
