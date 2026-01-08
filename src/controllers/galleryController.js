@@ -94,6 +94,78 @@ exports.uploadImage = async (req, res) => {
 };
 
 /**
+ * @desc    Upload image using base64 (for Android compatibility)
+ * @route   POST /api/gallery/upload-base64
+ * @access  Private (Club Members)
+ */
+exports.uploadBase64Image = async (req, res) => {
+    try {
+        console.log('Incoming Base64 Gallery Upload');
+
+        const { image, title, description, clubId, category, tags } = req.body;
+
+        if (!image) {
+            return res.status(400).json({ success: false, message: 'Please provide an image' });
+        }
+
+        // Validate clubId if provided
+        const validClubId = clubId && mongoose.Types.ObjectId.isValid(clubId) ? clubId : undefined;
+
+        // Upload base64 to Cloudinary
+        const result = await uploadToCloudinary(Buffer.from(image.split(',')[1], 'base64'), 'gallery');
+
+        const newImage = await Gallery.create({
+            imageUrl: result.url,
+            publicId: result.publicId,
+            title,
+            description,
+            uploadedBy: req.user._id,
+            clubId: validClubId,
+            category: category || 'other',
+            tags: tags || [],
+            status: 'pending' // Require admin approval
+        });
+
+        res.status(201).json({
+            success: true,
+            data: newImage,
+            message: 'Image uploaded successfully.'
+        });
+
+        // Notify Admins
+        try {
+            const admins = await User.find({ role: 'admin' }).select('_id');
+            const adminIds = admins.map(a => a._id);
+
+            if (adminIds.length > 0) {
+                const adminNotifs = adminIds.map(adminId => ({
+                    userId: adminId,
+                    type: 'gallery_upload',
+                    title: 'New Gallery Upload',
+                    message: `${req.user.displayName} uploaded a new image for approval.`,
+                    relatedId: newImage._id,
+                    relatedModel: 'Gallery'
+                }));
+                await Notification.insertMany(adminNotifs);
+                await sendPushNotificationToMany(adminIds, {
+                    title: 'New Gallery Upload 📸',
+                    body: `${req.user.displayName} just uploaded a new image. Check it for approval!`,
+                    data: { imageId: newImage._id.toString() }
+                });
+            }
+        } catch (notifError) {
+            console.error('Error sending admin notifications:', notifError);
+        }
+    } catch (error) {
+        console.error('Base64 Gallery upload error:', error);
+        res.status(400).json({
+            success: false,
+            message: error.message || 'Failed to upload image'
+        });
+    }
+};
+
+/**
  * @desc    Get all approved gallery images
  * @route   GET /api/gallery
  * @access  Public

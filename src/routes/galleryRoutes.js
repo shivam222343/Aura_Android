@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
     uploadImage,
+    uploadBase64Image,
     getGalleryImages,
     updateImageStatus,
     toggleLike,
@@ -15,6 +16,7 @@ router.route('/')
     .get(getGalleryImages)
     .post(protect, upload.single('image'), uploadImage);
 
+router.post('/upload-base64', protect, uploadBase64Image);
 router.put('/:id/status', protect, authorize('admin'), updateImageStatus);
 router.post('/:id/like', protect, toggleLike);
 router.post('/:id/comment', protect, addComment);
