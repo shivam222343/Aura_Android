@@ -272,23 +272,28 @@ exports.updateProfile = async (req, res) => {
 exports.uploadProfilePicture = async (req, res) => {
     try {
         console.log('Upload Profile Picture reached');
-        console.log('req.file:', req.file ? {
-            fieldname: req.file.fieldname,
-            originalname: req.file.originalname,
-            mimetype: req.file.mimetype,
-            size: req.file.size
-        } : 'undefined');
+        console.log('req.file:', req.file ? 'FormData upload' : 'Base64 upload');
         console.log('req.body:', req.body);
 
-        if (!req.file) {
+        let buffer;
+
+        // Handle both FormData and base64
+        if (req.file) {
+            // FormData upload (web)
+            buffer = req.file.buffer;
+        } else if (req.body.image) {
+            // Base64 upload (Android)
+            const base64Data = req.body.image.split(',')[1];
+            buffer = Buffer.from(base64Data, 'base64');
+        } else {
             return res.status(400).json({
                 success: false,
                 message: 'Please upload an image'
             });
         }
 
-        // Upload to Cloudinary using buffer (since we use memoryStorage)
-        const result = await uploadImageBuffer(req.file.buffer, 'mavericks/profiles');
+        // Upload to Cloudinary using buffer
+        const result = await uploadImageBuffer(buffer, 'mavericks/profiles');
 
         // Update user
         const user = await User.findById(req.user._id);
