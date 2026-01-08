@@ -277,6 +277,81 @@ exports.sendGroupMessage = async (req, res) => {
 };
 
 /**
+ * @desc    Send base64 message to group chat (for Android compatibility)
+ * @route   POST /api/group-chat/:clubId/messages-base64
+ * @access  Private (Club Members)
+ */
+exports.sendBase64GroupMessage = async (req, res) => {
+    try {
+        let { clubId } = req.params;
+        let { content, type, replyTo, image } = req.body;
+        const userId = req.user._id;
+
+        if (!image) {
+            return res.status(400).json({ success: false, message: 'No media provided' });
+        }
+
+        // Check if user is a member
+        const user = await User.findById(userId);
+        const isMember = user.clubsJoined?.some(c => {
+            const cId = c.clubId?._id || c.clubId;
+            return cId?.toString() === clubId;
+        });
+
+        if (!isMember && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
+        // Convert base64 to buffer
+        const base64Data = image.split(',')[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Upload to Cloudinary
+        const result = await uploadImageBuffer(buffer, 'mavericks/chat');
+
+        let groupChat = await GroupChat.findOne({ clubId });
+        if (!groupChat) {
+            groupChat = await GroupChat.create({ clubId, messages: [], members: [] });
+        }
+
+        const newMessage = {
+            senderId: userId,
+            content: content || 'Sent an attachment',
+            type: type || 'media',
+            fileUrl: {
+                url: result.url,
+                publicId: result.publicId,
+                fileName: 'Attachment',
+                mimeType: image.includes('video') ? 'video/mp4' : 'image/jpeg'
+            },
+            replyTo: (replyTo && replyTo !== 'null' && replyTo !== '') ? replyTo : undefined,
+            createdAt: new Date()
+        };
+
+        groupChat.messages.push(newMessage);
+        await groupChat.save();
+
+        const senderInfo = await User.findById(userId).select('displayName profilePicture');
+        const lastSavedMessage = groupChat.messages[groupChat.messages.length - 1];
+        const populatedMessage = {
+            ...lastSavedMessage.toObject(),
+            senderId: senderInfo
+        };
+
+        // Emit via socket
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${clubId}`).emit('group-message', populatedMessage);
+        }
+
+        res.status(201).json({ success: true, data: populatedMessage });
+    } catch (error) {
+        console.error('Error sending base64 group message:', error);
+        res.status(500).json({ success: false, message: 'Error sending message' });
+    }
+};
+
+/**
  * @desc    Mark messages as read in group chat
  * @route   PUT /api/group-chat/:clubId/read
  * @access  Private (Club Members)

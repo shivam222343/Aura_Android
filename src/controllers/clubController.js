@@ -142,6 +142,53 @@ exports.updateClub = async (req, res) => {
 };
 
 /**
+ * @desc    Update club logo using base64 (for Android compatibility)
+ * @route   PUT /api/clubs/:id/logo-base64
+ * @access  Admin/Subadmin/Club Admin
+ */
+exports.updateClubLogoBase64 = async (req, res) => {
+    try {
+        const club = await Club.findById(req.params.id);
+        if (!club) {
+            return res.status(404).json({ success: false, message: 'Club not found' });
+        }
+
+        const { logo } = req.body;
+        if (!logo) {
+            return res.status(400).json({ success: false, message: 'Please provide logo data' });
+        }
+
+        // Check authorization
+        const isMember = req.user.clubsJoined.some(c => c.clubId.toString() === req.params.id);
+        if (!isMember && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Unauthorized' });
+        }
+
+        // Convert base64 to buffer
+        const base64Data = logo.split(',')[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Upload to Cloudinary
+        const result = await uploadImageBuffer(buffer, 'mavericks/clubs');
+
+        club.logo = {
+            url: result.url,
+            publicId: result.publicId
+        };
+
+        await club.save();
+
+        res.status(200).json({
+            success: true,
+            data: club
+        });
+    } catch (error) {
+        console.error('Update club logo base64 error:', error);
+        res.status(500).json({ success: false, message: 'Error updating logo' });
+    }
+};
+
+/**
  * @desc    Add member to club via Maverick ID
  * @route   POST /api/clubs/add-member
  * @access  Admin/Subadmin

@@ -177,6 +177,64 @@ exports.sendMessage = async (req, res) => {
 };
 
 /**
+ * @desc    Send base64 message (for Android compatibility)
+ * @route   POST /api/messages/upload-base64
+ * @access  Private
+ */
+exports.sendBase64Message = async (req, res) => {
+    try {
+        const { receiverId, content, type, replyTo, image } = req.body;
+        const senderId = req.user._id;
+
+        if (!image) {
+            return res.status(400).json({ success: false, message: 'No media provided' });
+        }
+
+        // Convert base64 to buffer
+        const base64Data = image.split(',')[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Upload to Cloudinary
+        const result = await uploadImageBuffer(buffer, 'mavericks/chat');
+
+        const newMessage = await Message.create({
+            senderId,
+            receiverId,
+            content: content || 'Sent an attachment',
+            type: type || 'media',
+            fileUrl: result.url,
+            publicId: result.publicId,
+            replyTo: (replyTo && replyTo !== 'null' && replyTo !== '') ? replyTo : undefined
+        });
+
+        const populatedMessage = await Message.findById(newMessage._id)
+            .populate('senderId', 'displayName profilePicture')
+            .populate('replyTo');
+
+        // Socket.io event
+        const io = req.app.get('io');
+        if (io) {
+            io.to(receiverId.toString()).emit('message:receive', populatedMessage);
+        }
+
+        res.status(201).json({ success: true, data: populatedMessage });
+
+        // Push Notification if offline
+        const receiverRoom = io.sockets.adapter.rooms.get(receiverId.toString());
+        if (!receiverRoom || receiverRoom.size === 0) {
+            sendPushNotification(receiverId, {
+                title: populatedMessage.senderId.displayName,
+                body: 'Sent an attachment',
+                data: { screen: 'Chat', params: { otherUser: { _id: senderId, displayName: populatedMessage.senderId.displayName } } }
+            });
+        }
+    } catch (error) {
+        console.error('Error sending base64 message:', error);
+        res.status(500).json({ success: false, message: 'Error sending message' });
+    }
+};
+
+/**
  * @desc    Mark messages as read
  * @route   PUT /api/messages/:userId/read
  * @access  Private

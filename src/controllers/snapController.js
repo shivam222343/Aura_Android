@@ -27,7 +27,7 @@ exports.uploadSnap = async (req, res) => {
         let recipientsList = [];
         if (recipients) {
             try {
-                recipientsList = JSON.parse(recipients);
+                recipientsList = typeof recipients === 'string' ? JSON.parse(recipients) : recipients;
             } catch (e) {
                 // If it's a single ID passed as string
                 if (typeof recipients === 'string' && recipients.length > 0) {
@@ -44,8 +44,6 @@ exports.uploadSnap = async (req, res) => {
         } else {
             return res.status(400).json({ success: false, message: 'Please upload an image/video or provide a URL' });
         }
-
-
 
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + 24);
@@ -68,15 +66,10 @@ exports.uploadSnap = async (req, res) => {
         // Notify club room
         const io = req.app.get('io');
         if (io) {
-            // If specific recipients, we might want to emit only to them, but filtering in room is harder.
-            // Client side filtering is also an option, but for privacy, backend should control data.
-            // For now, emit to club, but client should check visibility (or we assume "snap:new" is a generic alert).
-            // Better: emit to specific users if targeted.
             if (recipientsList && recipientsList.length > 0) {
                 recipientsList.forEach(recipientId => {
                     io.to(recipientId.toString()).emit('snap:new', populatedSnap);
                 });
-                // Also emit to sender so they see it
                 io.to(senderId.toString()).emit('snap:new', populatedSnap);
             } else {
                 io.to(`club:${clubId}`).emit('snap:new', populatedSnap);
@@ -94,8 +87,7 @@ exports.uploadSnap = async (req, res) => {
             if (recipientsList && recipientsList.length > 0) {
                 targetUserIds = recipientsList.filter(id => id.toString() !== senderId.toString());
             } else {
-                // Get all club members
-                const club = await require('../models/Club').findById(clubId).populate('members.userId');
+                const club = await Club.findById(clubId).populate('members.userId');
                 if (club) {
                     targetUserIds = club.members
                         .filter(m => m.userId && m.userId._id.toString() !== senderId.toString())
@@ -115,6 +107,109 @@ exports.uploadSnap = async (req, res) => {
         }
     } catch (error) {
         console.error('Error uploading snap:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error uploading snap'
+        });
+    }
+};
+
+/**
+ * @desc    Upload a snap using base64 (for Android compatibility)
+ * @route   POST /api/snaps/upload-base64
+ * @access  Private
+ */
+exports.uploadBase64Snap = async (req, res) => {
+    try {
+        console.log('[SnapController] Base64 upload attempt');
+
+        const { clubId, caption, type, recipients, media } = req.body;
+        const senderId = req.user._id;
+
+        if (!media) {
+            return res.status(400).json({ success: false, message: 'Please provide media data' });
+        }
+
+        let recipientsList = [];
+        if (recipients) {
+            try {
+                recipientsList = typeof recipients === 'string' ? JSON.parse(recipients) : recipients;
+            } catch (e) {
+                if (typeof recipients === 'string' && recipients.length > 0) {
+                    recipientsList = [recipients];
+                }
+            }
+        }
+
+        // Convert base64 to buffer
+        const base64Data = media.split(',')[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // Upload to Cloudinary
+        const result = await uploadImageBuffer(buffer, 'mavericks/snaps');
+
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 24);
+
+        const snap = await Snap.create({
+            senderId,
+            clubId,
+            mediaUrl: {
+                url: result.url,
+                publicId: result.publicId
+            },
+            type: type || 'image',
+            caption,
+            recipients: recipientsList,
+            expiresAt
+        });
+
+        const populatedSnap = await Snap.findById(snap._id).populate('senderId', 'displayName profilePicture');
+
+        // Notify club room via Socket.io
+        const io = req.app.get('io');
+        if (io) {
+            if (recipientsList && recipientsList.length > 0) {
+                recipientsList.forEach(recipientId => {
+                    io.to(recipientId.toString()).emit('snap:new', populatedSnap);
+                });
+                io.to(senderId.toString()).emit('snap:new', populatedSnap);
+            } else {
+                io.to(`club:${clubId}`).emit('snap:new', populatedSnap);
+            }
+        }
+
+        res.status(201).json({
+            success: true,
+            data: populatedSnap
+        });
+
+        // Trigger Push Notifications
+        try {
+            let targetUserIds = [];
+            if (recipientsList && recipientsList.length > 0) {
+                targetUserIds = recipientsList.filter(id => id.toString() !== senderId.toString());
+            } else {
+                const club = await Club.findById(clubId).populate('members.userId');
+                if (club) {
+                    targetUserIds = club.members
+                        .filter(m => m.userId && m.userId._id.toString() !== senderId.toString())
+                        .map(m => m.userId._id);
+                }
+            }
+
+            if (targetUserIds.length > 0) {
+                sendPushNotificationToMany(targetUserIds, {
+                    title: 'New Snap!',
+                    body: `${populatedSnap.senderId.displayName} shared a new snap`,
+                    data: { screen: 'Messages', params: { selectedClub: clubId } }
+                });
+            }
+        } catch (notifError) {
+            console.error('Error triggering snap notification:', notifError);
+        }
+    } catch (error) {
+        console.error('Error uploading base64 snap:', error);
         res.status(500).json({
             success: false,
             message: 'Error uploading snap'

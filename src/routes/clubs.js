@@ -6,6 +6,7 @@ const {
     getAllClubs,
     createClub,
     updateClub,
+    updateClubLogoBase64,
     addMemberToClub,
     getClubMembers,
     removeMemberFromClub,
@@ -16,6 +17,7 @@ const {
 router.get('/', protect, getAllClubs);
 router.get('/:id/members', protect, getClubMembers);
 router.put('/:id', protect, uploadImage.single('logo'), handleMulterError, updateClub);
+router.put('/:id/logo-base64', protect, updateClubLogoBase64);
 
 // Admin routes
 router.post('/', protect, authorize('admin'), uploadImage.single('logo'), handleMulterError, createClub);

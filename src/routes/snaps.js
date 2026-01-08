@@ -4,6 +4,7 @@ const { protect } = require('../middleware/auth');
 const { uploadMedia, handleMulterError } = require('../middleware/upload');
 const {
     uploadSnap,
+    uploadBase64Snap,
     getClubSnaps,
     getMySnaps,
     viewSnap,
@@ -15,6 +16,7 @@ const {
 router.use(protect);
 
 router.post('/', uploadMedia.single('file'), handleMulterError, uploadSnap);
+router.post('/upload-base64', uploadBase64Snap);
 router.get('/my-clubs', getMySnaps);
 router.get('/club/:clubId', getClubSnaps);
 router.post('/:snapId/view', viewSnap);
