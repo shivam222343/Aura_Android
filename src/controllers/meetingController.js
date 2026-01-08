@@ -393,7 +393,10 @@ exports.markAttendance = async (req, res) => {
         // Check if already marked
         const alreadyMarked = meeting.attendees.find(a => a.userId.toString() === req.user._id.toString());
         if (alreadyMarked) {
-            return res.status(400).json({ success: false, message: 'Attendance already marked.' });
+            return res.status(400).json({
+                success: false,
+                message: 'Your attendance is already marked for this meeting.'
+            });
         }
 
         // Add to attendees
@@ -411,10 +414,15 @@ exports.markAttendance = async (req, res) => {
         });
 
         // Emit socket event to admin (so they see real-time attendee list)
+        // Include user details for instant frontend update
         emitToClub(req, meeting.clubId, 'attendance_marked', {
             meetingId: meeting._id,
             userId: req.user._id,
-            status: 'present'
+            displayName: req.user.displayName,
+            maverickId: req.user.maverickId,
+            profilePicture: req.user.profilePicture,
+            status: 'present',
+            markedAt: new Date()
         });
 
     } catch (error) {

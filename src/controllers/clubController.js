@@ -252,6 +252,30 @@ exports.addMemberToClub = async (req, res) => {
 
         await user.save();
 
+        // Sync with GroupChat
+        const GroupChat = require('../models/GroupChat');
+        let groupChat = await GroupChat.findOne({ clubId: club._id });
+        if (groupChat) {
+            const isAlreadyMember = groupChat.members.some(m => m.userId.toString() === user._id.toString());
+            if (!isAlreadyMember) {
+                groupChat.members.push({ userId: user._id, role: 'member' });
+                await groupChat.save();
+            }
+        } else {
+            // Create group chat if it doesn't exist
+            await GroupChat.create({
+                clubId: club._id,
+                members: [{ userId: user._id, role: 'member' }],
+                messages: []
+            });
+        }
+
+        // Emit socket event for real-time update
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${clubId}`).emit('club:members:update', { clubId });
+        }
+
         res.status(200).json({
             success: true,
             message: 'User added to club successfully',
@@ -345,6 +369,20 @@ exports.removeMemberFromClub = async (req, res) => {
         }
 
         await user.save();
+
+        // Sync with GroupChat
+        const GroupChat = require('../models/GroupChat');
+        const groupChat = await GroupChat.findOne({ clubId });
+        if (groupChat) {
+            groupChat.members = groupChat.members.filter(m => m.userId.toString() !== userId);
+            await groupChat.save();
+        }
+
+        // Emit socket event for real-time update
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${clubId}`).emit('club:members:update', { clubId });
+        }
 
         res.status(200).json({
             success: true,

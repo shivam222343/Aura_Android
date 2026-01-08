@@ -444,3 +444,38 @@ exports.handleWebUpload = async (req, res) => {
         });
     }
 };
+
+/**
+ * @desc    Handle Base64 Upload (for instant Android uploads)
+ * @route   POST /api/web-upload/base64
+ * @access  Private
+ */
+exports.handleBase64Upload = async (req, res) => {
+    try {
+        const { image, type } = req.body;
+        if (!image) {
+            return res.status(400).json({ success: false, message: 'No image data provided' });
+        }
+
+        let folder = 'mavericks/others';
+        if (type === 'profile') folder = 'mavericks/profiles';
+        else if (type === 'gallery') folder = 'mavericks/gallery';
+        else if (type === 'message' || type === 'chat') folder = 'mavericks/chat';
+        else if (type === 'snap') folder = 'mavericks/snaps';
+
+        const base64Data = image.split(',')[1] || image;
+        const buffer = Buffer.from(base64Data, 'base64');
+        const result = await uploadImageBuffer(buffer, folder);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                url: result.url,
+                publicId: result.publicId
+            }
+        });
+    } catch (error) {
+        console.error('Base64 Upload Error:', error);
+        res.status(500).json({ success: false, message: 'Upload failed' });
+    }
+};
