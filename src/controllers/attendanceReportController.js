@@ -30,9 +30,8 @@ exports.getClubAttendanceReport = async (req, res) => {
             .sort({ date: -1 })
             .lean();
 
-        // Get all members of the club
-        const club = await Club.findById(clubId).populate('members', 'displayName email maverickId').lean();
-
+        // Get club details first
+        const club = await Club.findById(clubId).lean();
         if (!club) {
             return res.status(404).json({
                 success: false,
@@ -40,9 +39,13 @@ exports.getClubAttendanceReport = async (req, res) => {
             });
         }
 
-        // Get member details
-        const memberIds = club.members.map(m => m._id || m);
-        const members = await User.find({ _id: { $in: memberIds } })
+        // Get all members of the club (using both club's member list and user's joined list for robustness)
+        const members = await User.find({
+            $or: [
+                { 'clubsJoined.clubId': clubId },
+                { _id: { $in: club.members || [] } }
+            ]
+        })
             .select('displayName email maverickId')
             .lean();
 
