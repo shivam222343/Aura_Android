@@ -10,7 +10,8 @@ const {
     viewSnap,
     deleteSnap,
     getSnapViewers,
-    updateSnapCaption
+    updateSnapCaption,
+    toggleLike
 } = require('../controllers/snapController');
 
 router.use(protect);
@@ -23,5 +24,6 @@ router.post('/:snapId/view', viewSnap);
 router.delete('/:snapId', deleteSnap);
 router.get('/:snapId/viewers', getSnapViewers);
 router.put('/:snapId/caption', updateSnapCaption);
+router.post('/:snapId/like', toggleLike);
 
 module.exports = router;

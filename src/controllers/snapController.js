@@ -454,3 +454,46 @@ exports.updateSnapCaption = async (req, res) => {
         res.status(500).json({ success: false, message: 'Error updating snap caption' });
     }
 };
+
+/**
+ * @desc    Toggle like on snap
+ * @route   POST /api/snaps/:snapId/like
+ * @access  Private
+ */
+exports.toggleLike = async (req, res) => {
+    try {
+        const snapId = req.params.snapId;
+        const userId = req.user._id;
+
+        const snap = await Snap.findById(snapId);
+        if (!snap) {
+            return res.status(404).json({ success: false, message: 'Snap not found' });
+        }
+
+        const likeIndex = snap.likes.indexOf(userId);
+        if (likeIndex > -1) {
+            // Already liked, so unlike
+            snap.likes.splice(likeIndex, 1);
+        } else {
+            // Not liked, so like
+            snap.likes.push(userId);
+        }
+
+        await snap.save();
+
+        // Notify club via socket
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${snap.clubId}`).emit('snap:like', { snapId, likes: snap.likes });
+        }
+
+        res.status(200).json({
+            success: true,
+            likes: snap.likes,
+            liked: likeIndex === -1
+        });
+    } catch (error) {
+        console.error('Error toggling like on snap:', error);
+        res.status(500).json({ success: false, message: 'Error toggling like' });
+    }
+};

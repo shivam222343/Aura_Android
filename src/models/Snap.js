@@ -29,6 +29,10 @@ const snapSchema = new mongoose.Schema({
         ref: 'User'
     }], // If empty, visible to all club members
     caption: String,
+    likes: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
     deleted: {
         type: Boolean,
         default: false

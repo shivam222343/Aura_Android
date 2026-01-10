@@ -249,7 +249,6 @@ exports.updateImageStatus = async (req, res) => {
                         data: { imageId: image._id.toString() }
                     });
 
-                    // Broad push notification to others
                     await sendPushNotificationToMany(userIds, {
                         title: 'New Gallery Photo 📸',
                         body: 'Someone just shared a new moment in the gallery. Check it out!',
@@ -258,6 +257,16 @@ exports.updateImageStatus = async (req, res) => {
                 }
             } catch (notifError) {
                 console.error('Error sending approval notifications:', notifError);
+            }
+
+            // Real-time socket broadcast for all users
+            const io = req.app.get('io');
+            if (io) {
+                const populatedImage = await Gallery.findById(image._id)
+                    .populate('uploadedBy', 'displayName profilePicture')
+                    .populate('comments.user', 'displayName profilePicture')
+                    .populate('clubId', 'name');
+                io.emit('gallery:new', populatedImage);
             }
         }
     } catch (error) {
