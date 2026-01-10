@@ -338,10 +338,25 @@ exports.sendBase64GroupMessage = async (req, res) => {
             senderId: senderInfo
         };
 
+        // Handle replyTo population for the socket/response
+        if (populatedMessage.replyTo) {
+            const replyMsg = groupChat.messages.id(populatedMessage.replyTo);
+            if (replyMsg) {
+                const replySender = await User.findById(replyMsg.senderId).select('displayName profilePicture');
+                populatedMessage.replyTo = {
+                    ...replyMsg.toObject(),
+                    senderId: replySender
+                };
+            }
+        }
+
         // Emit via socket
         const io = req.app.get('io');
         if (io) {
-            io.to(`club:${clubId}`).emit('group-message', populatedMessage);
+            io.to(`club:${clubId}`).emit('group:message', {
+                clubId,
+                message: populatedMessage
+            });
         }
 
         res.status(201).json({ success: true, data: populatedMessage });

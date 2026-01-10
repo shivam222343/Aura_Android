@@ -15,9 +15,13 @@ const groupMessageSchema = new mongoose.Schema({
         enum: ['text', 'image', 'video', 'document', 'media', 'file'],
         default: 'text'
     },
-    fileUrl: String,
-    fileName: String,
-    fileSize: Number,
+    fileUrl: {
+        url: String,
+        publicId: String,
+        fileName: String,
+        fileSize: Number,
+        mimeType: String
+    },
     replyTo: {
         type: mongoose.Schema.Types.ObjectId
     },
