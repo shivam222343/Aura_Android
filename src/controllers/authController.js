@@ -4,6 +4,7 @@ const Club = require('../models/Club');
 const Meeting = require('../models/Meeting');
 const Task = require('../models/Task');
 const { uploadImage, uploadImageBuffer } = require('../config/cloudinary');
+const { getCache, setCache, delCache } = require('../utils/cache');
 
 /**
  * Generate JWT Token
@@ -100,10 +101,12 @@ exports.signin = async (req, res) => {
             });
         }
 
-        // Update online status
         user.isOnline = true;
         user.lastSeen = new Date();
         await user.save();
+
+        // Invalidate profile cache
+        await delCache(`user:profile:${user._id}`);
 
         // Generate token
         const token = generateToken(user._id);
@@ -157,11 +160,25 @@ exports.logout = async (req, res) => {
  */
 exports.getMe = async (req, res) => {
     try {
+        const cacheKey = `user:profile:${req.user._id}`;
+        const cachedUser = await getCache(cacheKey);
+
+        if (cachedUser) {
+            return res.status(200).json({
+                success: true,
+                data: cachedUser,
+                source: 'cache'
+            });
+        }
+
         const user = await User.findById(req.user._id).populate('clubsJoined.clubId', 'name logo');
+
+        await setCache(cacheKey, user, 3600); // Cache for 1 hour
 
         res.status(200).json({
             success: true,
-            data: user
+            data: user,
+            source: 'database'
         });
     } catch (error) {
         console.error('Get me error:', error);
@@ -217,7 +234,6 @@ exports.updateProfile = async (req, res) => {
         if (fullName) user.fullName = fullName;
         if (birthDate) user.birthDate = new Date(birthDate);
         if (branch) user.branch = branch;
-        if (branch) user.branch = branch;
         if (passoutYear) user.passoutYear = passoutYear;
 
         // Support updating profile picture via URL directly (e.g. from AI avatars or History or Web Upload)
@@ -249,6 +265,10 @@ exports.updateProfile = async (req, res) => {
 
 
         await user.save();
+
+        // Invalidate caches
+        await delCache(`user:profile:${user._id}`);
+        await delCache(`user:dashboard:${user._id}`);
 
         res.status(200).json({
             success: true,
@@ -316,6 +336,10 @@ exports.uploadProfilePicture = async (req, res) => {
             publicId: result.publicId
         };
         await user.save();
+
+        // Invalidate caches
+        await delCache(`user:profile:${user._id}`);
+        await delCache(`user:dashboard:${user._id}`);
 
         res.status(200).json({
             success: true,
@@ -412,6 +436,17 @@ exports.updateFCMToken = async (req, res) => {
 exports.getDashboardData = async (req, res) => {
     try {
         const userId = req.user._id;
+        const cacheKey = `user:dashboard:${userId}`;
+        const cachedDashboard = await getCache(cacheKey);
+
+        if (cachedDashboard) {
+            return res.status(200).json({
+                success: true,
+                data: cachedDashboard,
+                source: 'cache'
+            });
+        }
+
         const now = new Date();
         const user = await User.findById(userId);
         const clubIds = user.clubsJoined.map(c => (c.clubId?._id || c.clubId).toString());
@@ -515,7 +550,7 @@ exports.getDashboardData = async (req, res) => {
             };
         });
 
-        res.status(200).json({
+        const dashboardData = {
             success: true,
             data: {
                 globalStats: {
@@ -555,7 +590,12 @@ exports.getDashboardData = async (req, res) => {
                     }));
                 })()
             }
-        });
+        };
+
+        // Cache dashboard for 5 minutes
+        await setCache(cacheKey, dashboardData.data, 300);
+
+        res.status(200).json(dashboardData);
     } catch (error) {
         console.error('Dashboard data error:', error);
         res.status(500).json({

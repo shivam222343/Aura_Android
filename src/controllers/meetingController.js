@@ -3,6 +3,7 @@ const Club = require('../models/Club');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { sendPushNotification, sendClubPushNotification } = require('../utils/pushNotifications');
+const { getCache, setCache, delCache } = require('../utils/cache');
 
 // Helper to emit socket events
 const emitToClub = (req, clubId, event, data) => {
@@ -109,6 +110,9 @@ exports.createMeeting = async (req, res) => {
             // Don't fail the meeting creation if notification fails
         }
 
+        // Invalidate meetings cache
+        await delCache(`club:meetings:${clubId}`);
+
         res.status(201).json({
             success: true,
             data: meeting
@@ -157,6 +161,9 @@ exports.updateMeeting = async (req, res) => {
 
         meeting = await Meeting.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
 
+        // Invalidate meetings cache
+        await delCache(`club:meetings:${meeting.clubId}`);
+
         res.status(200).json({ success: true, data: meeting });
 
         // Emit socket event
@@ -184,6 +191,9 @@ exports.updateMeetingStatus = async (req, res) => {
 
         meeting.status = status;
         await meeting.save();
+
+        // Invalidate meetings cache
+        await delCache(`club:meetings:${meeting.clubId}`);
 
         res.status(200).json({ success: true, data: meeting });
 
@@ -236,6 +246,10 @@ exports.deleteMeeting = async (req, res) => {
 
         const clubId = meeting.clubId;
         await meeting.deleteOne();
+
+        // Invalidate meetings cache
+        await delCache(`club:meetings:${clubId}`);
+
         res.status(200).json({ success: true, message: 'Meeting deleted successfully' });
 
         // Emit socket event
@@ -277,6 +291,17 @@ exports.getClubMeetings = async (req, res) => {
             }
         }
 
+        const cacheKey = `club:meetings:${clubId}`;
+        const cachedMeetings = await getCache(cacheKey);
+
+        if (cachedMeetings) {
+            return res.status(200).json({
+                success: true,
+                data: cachedMeetings,
+                source: 'cache'
+            });
+        }
+
         const meetings = await Meeting.find(query)
             .sort({ date: 1 })
             .populate('clubId', 'name')
@@ -294,12 +319,14 @@ exports.getClubMeetings = async (req, res) => {
             !upcoming.some(u => u._id.toString() === m._id.toString())
         ).reverse(); // Most recent past first
 
+        const result = { upcoming, past };
+
+        await setCache(cacheKey, result, 1800); // Cache for 30 minutes
+
         res.status(200).json({
             success: true,
-            data: {
-                upcoming,
-                past
-            }
+            data: result,
+            source: 'database'
         });
 
     } catch (error) {
@@ -407,6 +434,10 @@ exports.markAttendance = async (req, res) => {
         });
 
         await meeting.save();
+
+        // Invalidate caches
+        await delCache(`club:meetings:${meeting.clubId}`);
+        await delCache(`user:dashboard:${req.user._id}`);
 
         res.status(200).json({
             success: true,

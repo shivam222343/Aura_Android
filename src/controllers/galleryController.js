@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { sendPushNotification, sendPushNotificationToMany } = require('../utils/notifications');
 const { uploadImageBuffer: uploadToCloudinary } = require('../config/cloudinary');
+const { getCache, setCache, delCache, delCacheByPattern } = require('../utils/cache');
 
 /**
  * @desc    Upload image to gallery
@@ -183,15 +184,29 @@ exports.getGalleryImages = async (req, res) => {
         if (category && category !== 'all') query.category = category;
         if (clubId) query.clubId = clubId;
 
+        const cacheKey = `gallery:images:${category || 'all'}:${clubId || 'all'}:${status || 'approved'}`;
+        const cachedImages = await getCache(cacheKey);
+
+        if (cachedImages) {
+            return res.status(200).json({
+                success: true,
+                data: cachedImages,
+                source: 'cache'
+            });
+        }
+
         const images = await Gallery.find(query)
             .populate('uploadedBy', 'displayName profilePicture')
             .populate('comments.user', 'displayName profilePicture')
             .populate('clubId', 'name')
             .sort({ createdAt: -1 });
 
+        await setCache(cacheKey, images, 1800); // 30 mins
+
         res.status(200).json({
             success: true,
-            data: images
+            data: images,
+            source: 'database'
         });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error' });
@@ -215,6 +230,9 @@ exports.updateImageStatus = async (req, res) => {
         image.status = status;
         image.approvedBy = req.user._id;
         await image.save();
+
+        // Invalidate gallery caches
+        await delCacheByPattern('gallery:images:*');
 
         res.status(200).json({
             success: true,
@@ -292,6 +310,9 @@ exports.toggleLike = async (req, res) => {
         }
 
         await image.save();
+
+        // Invalidate specific cache or pattern
+        await delCacheByPattern('gallery:images:*');
 
         // Emit Socket Event
         const io = req.app.get('io');
@@ -426,6 +447,9 @@ exports.deleteImage = async (req, res) => {
         }
 
         await image.deleteOne();
+
+        // Invalidate gallery caches
+        await delCacheByPattern('gallery:images:*');
 
         res.status(200).json({ success: true, message: 'Image removed' });
     } catch (error) {

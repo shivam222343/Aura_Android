@@ -10,6 +10,7 @@ const morgan = require('morgan');
 const connectDB = require('./src/config/database');
 const { sendPushNotification } = require('./src/utils/pushNotifications');
 const { initReminderService } = require('./src/services/reminderService');
+const { connectRedis } = require('./src/config/redis');
 
 // Initialize Express app
 const app = express();
@@ -24,8 +25,9 @@ const io = socketIo(server, {
     }
 });
 
-// Connect to MongoDB
+// Connect to MongoDB and Redis
 connectDB();
+connectRedis();
 
 // CORS - Must be before other middleware that might return early
 app.use(cors({

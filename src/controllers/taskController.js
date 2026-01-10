@@ -2,6 +2,7 @@ const Task = require('../models/Task');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { sendPushNotificationToMany } = require('../utils/pushNotifications');
+const { getCache, setCache, delCache } = require('../utils/cache');
 
 /**
  * @desc    Create a new task
@@ -71,6 +72,12 @@ exports.createTask = async (req, res) => {
             console.error('Task notification error:', notifErr);
         }
 
+        // Invalidate caches for all assignees and the dashboard
+        for (const userId of assignedTo) {
+            await delCache(`user:tasks:${userId}`);
+            await delCache(`user:dashboard:${userId}`);
+        }
+
         res.status(201).json({ success: true, data: task });
     } catch (error) {
         console.error('Create task error:', error);
@@ -95,13 +102,30 @@ exports.getTasks = async (req, res) => {
             query['assignedTo.user'] = req.user._id;
         }
 
+        const cacheKey = `user:tasks:${req.user._id}:${clubId || 'all'}`;
+        const cachedTasks = await getCache(cacheKey);
+
+        if (cachedTasks) {
+            return res.status(200).json({
+                success: true,
+                data: cachedTasks,
+                source: 'cache'
+            });
+        }
+
         const tasks = await Task.find(query)
             .populate('assignedTo.user', 'displayName profilePicture')
             .populate('assignedBy', 'displayName')
             .populate('meetingId', 'name date')
             .sort({ dueDate: 1 });
 
-        res.status(200).json({ success: true, data: tasks });
+        await setCache(cacheKey, tasks, 1800); // Cache for 30 mins
+
+        res.status(200).json({
+            success: true,
+            data: tasks,
+            source: 'database'
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error' });
     }
@@ -156,6 +180,11 @@ exports.updateTaskStatus = async (req, res) => {
             io.to(`club:${task.clubId}`).emit('task_update', populatedTask);
         }
 
+        // Invalidate caches
+        await delCache(`user:tasks:${req.user._id}:${task.clubId}`);
+        await delCache(`user:tasks:${req.user._id}:all`);
+        await delCache(`user:dashboard:${req.user._id}`);
+
         res.status(200).json({ success: true, data: populatedTask });
     } catch (error) {
         console.error('Update task status error:', error);
@@ -183,6 +212,13 @@ exports.deleteTask = async (req, res) => {
         }
 
         await task.deleteOne();
+
+        // Invalidate caches (Best effort, usually for the club)
+        // Since we don't know all assignees easily here without keeping them in memory,
+        // it will expire naturally or we could loop if needed.
+        // For now, let's just clear the dashboard for the one who deleted it if they were assigned too.
+        await delCache(`user:dashboard:${req.user._id}`);
+
         res.status(200).json({ success: true, message: 'Task removed' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error' });

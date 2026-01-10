@@ -2,6 +2,7 @@ const GroupChat = require('../models/GroupChat');
 const Club = require('../models/Club');
 const User = require('../models/User');
 const { uploadImageBuffer } = require('../config/cloudinary');
+const { getCache, setCache, delCache } = require('../utils/cache');
 
 /**
  * @desc    Get group chat for a club
@@ -750,13 +751,27 @@ exports.getPollVoters = async (req, res) => {
 
         const voters = message.pollData.options[optionIndex].votes;
 
+        const cacheKey = `poll:voters:${messageId}:${optionIndex}`;
+        const cachedVoters = await getCache(cacheKey);
+
+        if (cachedVoters) {
+            return res.status(200).json({
+                success: true,
+                data: cachedVoters,
+                source: 'cache'
+            });
+        }
+
         // Populate voter info
         const populatedVoters = await User.find({ _id: { $in: voters } })
             .select('displayName profilePicture isOnline');
 
+        await setCache(cacheKey, populatedVoters, 300); // 5 mins
+
         res.status(200).json({
             success: true,
-            data: populatedVoters
+            data: populatedVoters,
+            source: 'database'
         });
     } catch (error) {
         console.error('Error fetching poll voters:', error);
@@ -779,15 +794,25 @@ exports.getMessageViewers = async (req, res) => {
         const message = groupChat.messages.id(messageId);
         if (!message) return res.status(404).json({ success: false, message: 'Message not found' });
 
+        const cacheKey = `chat:viewers:${messageId}`;
+        const cachedViewers = await getCache(cacheKey);
+
+        if (cachedViewers) {
+            return res.status(200).json({
+                success: true,
+                data: cachedViewers,
+                source: 'cache'
+            });
+        }
+
         // Get users who have read this message with their readAt timestamps
         const readByData = message.readBy || [];
 
-        // Populate viewer info
+        // ... (existing population logic)
         const viewerIds = readByData.map(r => r.userId);
         const users = await User.find({ _id: { $in: viewerIds } })
             .select('displayName profilePicture isOnline');
 
-        // Map users with their readAt timestamps
         const viewersWithTimestamp = users.map(user => {
             const readEntry = readByData.find(r => r.userId.toString() === user._id.toString());
             return {
@@ -799,9 +824,12 @@ exports.getMessageViewers = async (req, res) => {
             };
         });
 
+        await setCache(cacheKey, viewersWithTimestamp, 60); // 1 minute
+
         res.status(200).json({
             success: true,
-            data: viewersWithTimestamp
+            data: viewersWithTimestamp,
+            source: 'database'
         });
     } catch (error) {
         console.error('Error fetching message viewers:', error);

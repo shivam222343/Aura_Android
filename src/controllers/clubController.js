@@ -1,6 +1,7 @@
 const Club = require('../models/Club');
 const User = require('../models/User');
 const { uploadImageBuffer } = require('../config/cloudinary');
+const { getCache, setCache, delCache } = require('../utils/cache');
 
 /**
  * @desc    Get all clubs
@@ -9,17 +10,36 @@ const { uploadImageBuffer } = require('../config/cloudinary');
  */
 exports.getAllClubs = async (req, res) => {
     try {
+        const cacheKey = 'clubs:all';
+        const cachedClubs = await getCache(cacheKey);
+
+        if (cachedClubs) {
+            return res.status(200).json({
+                success: true,
+                count: cachedClubs.length,
+                data: cachedClubs,
+                source: 'cache'
+            });
+        }
+
         const clubs = await Club.find()
             .populate('createdBy', 'displayName profilePicture')
             .sort('-createdAt');
 
+        await setCache(cacheKey, clubs, 3600); // Cache for 1 hour
+
         res.status(200).json({
             success: true,
             count: clubs.length,
-            data: clubs
+            data: clubs,
+            source: 'database'
         });
     } catch (error) {
-        //...
+        console.error('Get all clubs error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching clubs'
+        });
     }
 };
 
@@ -72,6 +92,9 @@ exports.createClub = async (req, res) => {
                 }
             }
         );
+
+        // Invalidate clubs cache
+        await delCache('clubs:all');
 
         res.status(201).json({
             success: true,
@@ -130,6 +153,8 @@ exports.updateClub = async (req, res) => {
 
 
         await club.save();
+        await delCache('clubs:all');
+
 
         res.status(200).json({
             success: true,
@@ -177,6 +202,8 @@ exports.updateClubLogoBase64 = async (req, res) => {
         };
 
         await club.save();
+        await delCache('clubs:all');
+
 
         res.status(200).json({
             success: true,
@@ -276,6 +303,9 @@ exports.addMemberToClub = async (req, res) => {
             io.to(`club:${clubId}`).emit('club:members:update', { clubId });
         }
 
+        // Invalidate club members cache
+        await delCache(`club:members:${clubId}`);
+
         res.status(200).json({
             success: true,
             message: 'User added to club successfully',
@@ -317,13 +347,28 @@ exports.getClubMembers = async (req, res) => {
             });
         }
 
+        const cacheKey = `club:members:${clubId}`;
+        const cachedMembers = await getCache(cacheKey);
+
+        if (cachedMembers) {
+            return res.status(200).json({
+                success: true,
+                count: cachedMembers.length,
+                data: cachedMembers,
+                source: 'cache'
+            });
+        }
+
         const members = await User.find({ 'clubsJoined.clubId': clubId })
             .select('displayName email maverickId role profilePicture clubsJoined');
+
+        await setCache(cacheKey, members, 1800); // Cache for 30 mins
 
         res.status(200).json({
             success: true,
             count: members.length,
-            data: members
+            data: members,
+            source: 'database'
         });
     } catch (error) {
         console.error('Get club members error:', error);
@@ -384,6 +429,9 @@ exports.removeMemberFromClub = async (req, res) => {
             io.to(`club:${clubId}`).emit('club:members:update', { clubId });
         }
 
+        // Invalidate club members cache
+        await delCache(`club:members:${clubId}`);
+
         res.status(200).json({
             success: true,
             message: 'Member removed successfully'
@@ -430,6 +478,10 @@ exports.deleteClub = async (req, res) => {
         );
 
         await club.deleteOne();
+
+        // Invalidate caches
+        await delCache('clubs:all');
+        await delCache(`club:members:${req.params.id}`);
 
         res.status(200).json({
             success: true,
