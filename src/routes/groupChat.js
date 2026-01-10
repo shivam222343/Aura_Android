@@ -12,7 +12,8 @@ const {
     addReaction,
     votePoll,
     updateSpinner,
-    getPollVoters
+    getPollVoters,
+    getMessageViewers
 } = require('../controllers/groupChatController');
 
 router.use(protect);
@@ -27,5 +28,6 @@ router.get('/:clubId/unread-count', getUnreadCount);
 router.post('/:clubId/messages/:messageId/vote', votePoll);
 router.put('/:clubId/messages/:messageId/spin', updateSpinner);
 router.get('/:clubId/messages/:messageId/votes/:optionIndex', getPollVoters);
+router.get('/:clubId/messages/:messageId/viewers', getMessageViewers);
 
 module.exports = router;

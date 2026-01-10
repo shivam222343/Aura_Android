@@ -754,3 +754,44 @@ exports.getPollVoters = async (req, res) => {
         res.status(500).json({ success: false, message: 'Error fetching voters' });
     }
 };
+
+/**
+ * @desc    Get users who have viewed/read a message
+ * @route   GET /api/group-chat/:clubId/messages/:messageId/viewers
+ * @access  Private (Club Members)
+ */
+exports.getMessageViewers = async (req, res) => {
+    try {
+        const { clubId, messageId } = req.params;
+
+        const groupChat = await GroupChat.findOne({ clubId });
+        if (!groupChat) return res.status(404).json({ success: false, message: 'Group chat not found' });
+
+        const message = groupChat.messages.id(messageId);
+        if (!message) return res.status(404).json({ success: false, message: 'Message not found' });
+
+        // Get users who have read this message
+        const viewers = message.readBy || [];
+
+        // Populate viewer info
+        const populatedViewers = await User.find({ _id: { $in: viewers } })
+            .select('displayName profilePicture isOnline');
+
+        // Add readAt timestamp if available (from members array)
+        const viewersWithTimestamp = populatedViewers.map(viewer => {
+            const member = groupChat.members.find(m => m.userId.toString() === viewer._id.toString());
+            return {
+                ...viewer.toObject(),
+                readAt: member?.lastRead || null
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            data: viewersWithTimestamp
+        });
+    } catch (error) {
+        console.error('Error fetching message viewers:', error);
+        res.status(500).json({ success: false, message: 'Error fetching viewers' });
+    }
+};
