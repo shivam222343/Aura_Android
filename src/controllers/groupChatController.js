@@ -408,6 +408,16 @@ exports.markGroupMessagesRead = async (req, res) => {
 
         await groupChat.save();
 
+        // Notify others that a user has read messages
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${clubId}`).emit('group:message:read', {
+                clubId,
+                userId,
+                readAt: new Date()
+            });
+        }
+
         res.status(200).json({
             success: true,
             message: 'Messages marked as read'
@@ -711,5 +721,36 @@ exports.updateSpinner = async (req, res) => {
     } catch (error) {
         console.error('Error updating spinner:', error);
         res.status(500).json({ success: false, message: 'Error updating spinner' });
+    }
+};
+
+/**
+ * @desc    Get users who voted for a specific poll option
+ * @route   GET /api/group-chat/:clubId/messages/:messageId/votes/:optionIndex
+ * @access  Private (Club Members)
+ */
+exports.getPollVoters = async (req, res) => {
+    try {
+        const { clubId, messageId, optionIndex } = req.params;
+
+        const groupChat = await GroupChat.findOne({ clubId });
+        if (!groupChat) return res.status(404).json({ success: false, message: 'Group chat not found' });
+
+        const message = groupChat.messages.id(messageId);
+        if (!message || message.type !== 'poll') return res.status(404).json({ success: false, message: 'Poll not found' });
+
+        const voters = message.pollData.options[optionIndex].votes;
+
+        // Populate voter info
+        const populatedVoters = await User.find({ _id: { $in: voters } })
+            .select('displayName profilePicture isOnline');
+
+        res.status(200).json({
+            success: true,
+            data: populatedVoters
+        });
+    } catch (error) {
+        console.error('Error fetching poll voters:', error);
+        res.status(500).json({ success: false, message: 'Error fetching voters' });
     }
 };

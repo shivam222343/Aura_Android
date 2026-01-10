@@ -249,6 +249,16 @@ exports.markAsRead = async (req, res) => {
             { $set: { read: true, readAt: new Date() } }
         );
 
+        // Notify the sender that their messages were read
+        const io = req.app.get('io');
+        if (io) {
+            io.to(otherUserId.toString()).emit('message:read', {
+                readerId: currentUserId,
+                senderId: otherUserId,
+                readAt: new Date()
+            });
+        }
+
         res.status(200).json({
             success: true,
             message: 'Messages marked as read'

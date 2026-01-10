@@ -11,7 +11,8 @@ const {
     getUnreadCount,
     addReaction,
     votePoll,
-    updateSpinner
+    updateSpinner,
+    getPollVoters
 } = require('../controllers/groupChatController');
 
 router.use(protect);
@@ -25,5 +26,6 @@ router.post('/:clubId/messages/:messageId/reaction', addReaction);
 router.get('/:clubId/unread-count', getUnreadCount);
 router.post('/:clubId/messages/:messageId/vote', votePoll);
 router.put('/:clubId/messages/:messageId/spin', updateSpinner);
+router.get('/:clubId/messages/:messageId/votes/:optionIndex', getPollVoters);
 
 module.exports = router;
