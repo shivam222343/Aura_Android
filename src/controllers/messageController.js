@@ -1,6 +1,7 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
 const { sendPushNotification } = require('../utils/pushNotifications');
+const { getCache, setCache, delCache } = require('../utils/cache');
 
 /**
  * @desc    Get messages for a conversation
@@ -13,6 +14,17 @@ exports.getMessages = async (req, res) => {
         const currentUserId = req.user._id;
 
         const conversationId = [currentUserId.toString(), otherUserId.toString()].sort().join('-');
+
+        const cacheKey = `messages:${conversationId}:${currentUserId}`;
+        const cachedMessages = await getCache(cacheKey);
+
+        if (cachedMessages) {
+            return res.status(200).json({
+                success: true,
+                data: cachedMessages,
+                source: 'cache'
+            });
+        }
 
         const messages = await Message.find({
             $or: [
@@ -29,9 +41,12 @@ exports.getMessages = async (req, res) => {
             .populate('replyTo')
             .populate('reactions.userId', 'displayName profilePicture');
 
+        await setCache(cacheKey, messages, 600); // Cache for 10 mins
+
         res.status(200).json({
             success: true,
-            data: messages
+            data: messages,
+            source: 'database'
         });
     } catch (error) {
         console.error('Error fetching messages:', error);
@@ -105,6 +120,12 @@ exports.sendMessage = async (req, res) => {
         if (io) {
             io.to(receiverId.toString()).emit('message:receive', populatedMessage);
         }
+
+        // Invalidate conversation and message caches
+        await delCache(`messages:${conversationId}:${senderId}`);
+        await delCache(`messages:${conversationId}:${receiverId}`);
+        await delCache(`conversations:${senderId}`);
+        await delCache(`conversations:${receiverId}`);
 
         res.status(201).json({
             success: true,
@@ -217,6 +238,13 @@ exports.sendBase64Message = async (req, res) => {
             io.to(receiverId.toString()).emit('message:receive', populatedMessage);
         }
 
+        // Invalidate caches
+        const conversationId = [senderId.toString(), receiverId.toString()].sort().join('-');
+        await delCache(`messages:${conversationId}:${senderId}`);
+        await delCache(`messages:${conversationId}:${receiverId}`);
+        await delCache(`conversations:${senderId}`);
+        await delCache(`conversations:${receiverId}`);
+
         res.status(201).json({ success: true, data: populatedMessage });
 
         // Push Notification if offline
@@ -258,6 +286,10 @@ exports.markAsRead = async (req, res) => {
                 readAt: new Date()
             });
         }
+
+        // Invalidate conversation caches for unread count updates
+        await delCache(`conversations:${otherUserId}`);
+        await delCache(`conversations:${currentUserId}`);
 
         res.status(200).json({
             success: true,
@@ -313,6 +345,11 @@ exports.addReaction = async (req, res) => {
             room.forEach(r => io.to(r).emit('message:reaction', { messageId, reactions: populatedMessage.reactions }));
         }
 
+        // Invalidate messages cache
+        const conversationId = [message.senderId.toString(), message.receiverId.toString()].sort().join('-');
+        await delCache(`messages:${conversationId}:${message.senderId}`);
+        await delCache(`messages:${conversationId}:${message.receiverId}`);
+
         res.status(200).json({
             success: true,
             data: populatedMessage.reactions
@@ -366,6 +403,13 @@ exports.deleteMessage = async (req, res) => {
             room.forEach(r => io.to(r).emit('message:delete', { messageId, type: 'everyone' }));
         }
 
+        // Invalidate caches
+        const conversationId = [message.senderId.toString(), message.receiverId.toString()].sort().join('-');
+        await delCache(`messages:${conversationId}:${message.senderId}`);
+        await delCache(`messages:${conversationId}:${message.receiverId}`);
+        await delCache(`conversations:${message.senderId}`);
+        await delCache(`conversations:${message.receiverId}`);
+
         res.status(200).json({
             success: true,
             message: 'Message deleted'
@@ -387,6 +431,17 @@ exports.deleteMessage = async (req, res) => {
 exports.getConversations = async (req, res) => {
     try {
         const userId = req.user._id;
+
+        const cacheKey = `conversations:${userId}`;
+        const cachedConversations = await getCache(cacheKey);
+
+        if (cachedConversations) {
+            return res.status(200).json({
+                success: true,
+                data: cachedConversations,
+                source: 'cache'
+            });
+        }
 
         // Find all messages involving the user
         const messages = await Message.find({
@@ -431,9 +486,13 @@ exports.getConversations = async (req, res) => {
             }
         });
 
+        const result = Array.from(conversations.values());
+        await setCache(cacheKey, result, 600); // 10 mins
+
         res.status(200).json({
             success: true,
-            data: Array.from(conversations.values())
+            data: result,
+            source: 'database'
         });
     } catch (error) {
         console.error('Error fetching conversations:', error);
