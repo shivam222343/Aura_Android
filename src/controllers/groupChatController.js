@@ -29,25 +29,44 @@ exports.getGroupChat = async (req, res) => {
             });
         }
 
-        let groupChat = await GroupChat.findOne({ clubId })
+        const { limit } = req.query;
+
+        let query = GroupChat.findOne({ clubId })
             .populate('clubId', 'name logo')
             .populate('members.userId', 'displayName profilePicture isOnline')
             .populate('messages.senderId', 'displayName profilePicture')
             .populate('messages.reactions.userId', 'displayName profilePicture')
             .populate('lastMessage.senderId', 'displayName profilePicture');
 
+        if (limit) {
+            query = query.slice('messages', -parseInt(limit));
+        }
+
+        let groupChat = await query;
+
+        let unreadCount = 0;
+        if (groupChat && limit) {
+            // If limit is small (e.g. for main screen), calculate unread count separately or from full doc
+            // For now, let's keep it simple: if we are in summary mode, we only care about the count
+            // We can optimize this later with a separate count query if needed
+            unreadCount = groupChat.messages.filter(msg =>
+                !msg.deleted &&
+                msg.senderId &&
+                msg.senderId.toString() !== userId.toString() &&
+                !msg.readBy.some(r => r.userId.toString() === userId.toString())
+            ).length;
+        }
+
         if (groupChat) {
             // Convert entire document to object first to preserve all populations
             const groupChatObj = groupChat.toObject();
 
-            // Function to find message by ID and return populated-like object (working on plain objects now)
+            // Function to find message by ID and return populated-like object
             const getPopulatedReply = (replyId) => {
                 if (!replyId) return null;
-                // Find in the plain array
                 const replyMsg = groupChatObj.messages.find(m => m._id.toString() === replyId.toString());
                 if (!replyMsg) return null;
 
-                // Find sender info
                 const sender = groupChatObj.messages.find(m => m.senderId && (m.senderId._id?.toString() === replyMsg.senderId.toString() || m.senderId.toString() === replyMsg.senderId.toString()))?.senderId;
 
                 return {
@@ -56,37 +75,29 @@ exports.getGroupChat = async (req, res) => {
                 };
             };
 
-            // Manually populate replyTo for filtered messages
             const filteredMessages = groupChatObj.messages.filter(msg =>
                 !msg.deleted &&
                 (!msg.deletedFor || !msg.deletedFor.map(id => id.toString()).includes(userId.toString()))
             ).map(msg => {
-                // msg is already a plain object
                 if (msg.replyTo) {
                     msg.replyTo = getPopulatedReply(msg.replyTo);
                 }
                 return msg;
             });
 
-            groupChat = groupChatObj;
-            groupChat.messages = filteredMessages;
+            groupChat = {
+                ...groupChatObj,
+                messages: filteredMessages,
+                unreadCount: unreadCount // Include the calculated unread count
+            };
         }
 
-        // If group chat doesn't exist, create it and add all club members
+        // ... (rest same: create if not exists)
         if (!groupChat) {
+            // ... (keep the same logic for creation)
             const club = await Club.findById(clubId);
-            if (!club) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Club not found'
-                });
-            }
-
-            // Get all club members
-            const clubMembers = await User.find({
-                'clubsJoined.clubId': clubId
-            });
-
+            if (!club) return res.status(404).json({ success: false, message: 'Club not found' });
+            const clubMembers = await User.find({ 'clubsJoined.clubId': clubId });
             groupChat = await GroupChat.create({
                 clubId,
                 name: `${club.name} Group Chat`,
@@ -97,7 +108,6 @@ exports.getGroupChat = async (req, res) => {
                 })),
                 messages: []
             });
-
             groupChat = await GroupChat.findById(groupChat._id)
                 .populate('members.userId', 'displayName profilePicture isOnline')
                 .populate('messages.senderId', 'displayName profilePicture');

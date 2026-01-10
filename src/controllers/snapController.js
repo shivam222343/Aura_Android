@@ -413,12 +413,13 @@ exports.getSnapViewers = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Snap not found or unauthorized' });
         }
 
-        // Format viewers list with time
+        // Format viewers list with time and liked status
         const viewers = snap.viewedBy.map(v => ({
             _id: v.userId._id,
             displayName: v.userId.displayName,
             profilePicture: v.userId.profilePicture,
-            viewedAt: v.viewedAt
+            viewedAt: v.viewedAt,
+            hasLiked: snap.likes.some(likeId => likeId.toString() === v.userId._id.toString())
         }));
 
         res.status(200).json({ success: true, data: viewers });
@@ -480,6 +481,24 @@ exports.toggleLike = async (req, res) => {
         }
 
         await snap.save();
+
+        const isLiked = likeIndex === -1;
+
+        // If liked, notify the snap owner
+        if (isLiked && snap.senderId.toString() !== userId.toString()) {
+            try {
+                const liker = await User.findById(userId).select('displayName');
+                if (liker) {
+                    sendPushNotificationToMany([snap.senderId], {
+                        title: 'Snap Liked! ❤️',
+                        body: `${liker.displayName} liked your snap`,
+                        data: { screen: 'Messages', params: { viewSnapId: snapId } }
+                    });
+                }
+            } catch (notifErr) {
+                console.error('Error sending snap like notification:', notifErr);
+            }
+        }
 
         // Notify club via socket
         const io = req.app.get('io');
