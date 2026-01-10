@@ -65,23 +65,28 @@ const sendPushNotification = async (pushToken, { title, body, data = {} }) => {
                 title: title,
                 body: body,
             },
-            data: Object.keys(data).reduce((acc, key) => {
-                acc[key] = String(data[key]);
-                return acc;
-            }, {}),
+            data: {
+                ...Object.keys(data).reduce((acc, key) => {
+                    acc[key] = String(data[key]);
+                    return acc;
+                }, {}),
+                title: String(title),
+                body: String(body),
+                message: String(body),
+            },
             token: pushToken,
             android: {
                 priority: 'high',
                 notification: {
                     sound: 'default',
                     channelId: 'default',
-                    clickAction: 'FLUTTER_NOTIFICATION_CLICK', // Standard for many cross-platform setups, but 'default' works for RN too usually.
                 },
             },
             apns: {
                 payload: {
                     aps: {
                         sound: 'default',
+                        badge: 1,
                     },
                 },
             },

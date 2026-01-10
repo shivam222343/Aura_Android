@@ -104,11 +104,12 @@ io.on('connection', (socket) => {
 
         try {
             const User = require('./src/models/User');
+            const now = new Date();
             await User.findByIdAndUpdate(userId, {
                 isOnline: true,
-                lastSeen: new Date()
+                lastSeen: now
             });
-            socket.broadcast.emit('user:status', { userId, isOnline: true });
+            socket.broadcast.emit('user:status', { userId, isOnline: true, lastSeen: now });
             console.log(`👤 User ${userId} is now online`);
         } catch (error) {
             console.error('Error updating user online status:', error);
@@ -139,10 +140,32 @@ io.on('connection', (socket) => {
         io.to(receiverId).emit('message:reaction', { messageId, reactions });
     });
 
+    // Explicit offline
+    socket.on('user:offline', async (userId) => {
+        try {
+            const User = require('./src/models/User');
+            const now = new Date();
+            await User.findByIdAndUpdate(userId, {
+                isOnline: false,
+                lastSeen: now
+            });
+            socket.broadcast.emit('user:status', { userId, isOnline: false, lastSeen: now });
+            console.log(`👤 User ${userId} is now offline (explicit)`);
+        } catch (error) {
+            console.error('Error updating user offline status:', error);
+        }
+    });
+
     // Typing indicator
     socket.on('message:typing', (data) => {
-        const { receiverId, isTyping, senderId } = data;
-        io.to(receiverId).emit('message:typing', { senderId, isTyping });
+        const { receiverId, isTyping, senderId, clubId } = data;
+        if (clubId) {
+            // Group typing
+            socket.to(`club:${clubId}`).emit('group:typing', { clubId, senderId, isTyping });
+        } else {
+            // Individual typing
+            io.to(receiverId).emit('message:typing', { senderId, isTyping });
+        }
     });
 
     // Send notification
@@ -164,11 +187,12 @@ io.on('connection', (socket) => {
         if (socket.userId) {
             try {
                 const User = require('./src/models/User');
+                const now = new Date();
                 await User.findByIdAndUpdate(socket.userId, {
                     isOnline: false,
-                    lastSeen: new Date()
+                    lastSeen: now
                 });
-                socket.broadcast.emit('user:status', { userId: socket.userId, isOnline: false });
+                socket.broadcast.emit('user:status', { userId: socket.userId, isOnline: false, lastSeen: now });
                 console.log(`👤 User ${socket.userId} is now offline`);
             } catch (error) {
                 console.error('Error updating user offline status:', error);
