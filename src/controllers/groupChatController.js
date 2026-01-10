@@ -408,12 +408,21 @@ exports.markGroupMessagesRead = async (req, res) => {
 
         await groupChat.save();
 
-        // Notify others that a user has read messages
+        // Notify others that a user has read messages via socket
         const io = req.app.get('io');
         if (io) {
-            io.to(`club:${clubId}`).emit('group:message:read', {
+            // Get user info for the notification
+            const User = require('../models/User');
+            const reader = await User.findById(userId).select('displayName profilePicture');
+
+            io.to(`club:${clubId}`).emit('group:messages:read', {
                 clubId,
                 userId,
+                reader: {
+                    _id: reader._id,
+                    displayName: reader.displayName,
+                    profilePicture: reader.profilePicture
+                },
                 readAt: new Date()
             });
         }
@@ -770,19 +779,23 @@ exports.getMessageViewers = async (req, res) => {
         const message = groupChat.messages.id(messageId);
         if (!message) return res.status(404).json({ success: false, message: 'Message not found' });
 
-        // Get users who have read this message
-        const viewers = message.readBy || [];
+        // Get users who have read this message with their readAt timestamps
+        const readByData = message.readBy || [];
 
         // Populate viewer info
-        const populatedViewers = await User.find({ _id: { $in: viewers } })
+        const viewerIds = readByData.map(r => r.userId);
+        const users = await User.find({ _id: { $in: viewerIds } })
             .select('displayName profilePicture isOnline');
 
-        // Add readAt timestamp if available (from members array)
-        const viewersWithTimestamp = populatedViewers.map(viewer => {
-            const member = groupChat.members.find(m => m.userId.toString() === viewer._id.toString());
+        // Map users with their readAt timestamps
+        const viewersWithTimestamp = users.map(user => {
+            const readEntry = readByData.find(r => r.userId.toString() === user._id.toString());
             return {
-                ...viewer.toObject(),
-                readAt: member?.lastRead || null
+                _id: user._id,
+                displayName: user.displayName,
+                profilePicture: user.profilePicture,
+                isOnline: user.isOnline,
+                readAt: readEntry?.readAt || null
             };
         });
 
