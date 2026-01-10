@@ -142,6 +142,11 @@ io.on('connection', (socket) => {
         io.to(receiverId).emit('message:reaction', { messageId, reactions });
     });
 
+    /**
+     * Maverick Games Socket Handlers
+     */
+    require('./src/sockets/gameSocket')(io, socket);
+
     // Explicit offline
     socket.on('user:offline', async (userId) => {
         try {
