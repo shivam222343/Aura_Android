@@ -9,7 +9,9 @@ const {
     markGroupMessagesRead,
     deleteGroupMessage,
     getUnreadCount,
-    addReaction
+    addReaction,
+    votePoll,
+    updateSpinner
 } = require('../controllers/groupChatController');
 
 router.use(protect);
@@ -21,5 +23,7 @@ router.put('/:clubId/read', markGroupMessagesRead);
 router.delete('/:clubId/messages/:messageId', deleteGroupMessage);
 router.post('/:clubId/messages/:messageId/reaction', addReaction);
 router.get('/:clubId/unread-count', getUnreadCount);
+router.post('/:clubId/messages/:messageId/vote', votePoll);
+router.put('/:clubId/messages/:messageId/spin', updateSpinner);
 
 module.exports = router;

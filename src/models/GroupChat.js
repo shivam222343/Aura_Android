@@ -12,8 +12,21 @@ const groupMessageSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['text', 'image', 'video', 'document', 'media', 'file'],
+        enum: ['text', 'image', 'video', 'document', 'media', 'file', 'poll', 'spinner'],
         default: 'text'
+    },
+    pollData: {
+        question: String,
+        options: [{
+            text: String,
+            votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+        }],
+        maxVotes: { type: Number, default: 1 }
+    },
+    spinnerData: {
+        items: [String],
+        result: String,
+        status: { type: String, enum: ['idle', 'spinning', 'completed'], default: 'idle' }
     },
     fileUrl: {
         url: String,

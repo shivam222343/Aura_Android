@@ -135,10 +135,12 @@ exports.sendGroupMessage = async (req, res) => {
         console.log(`[GroupChat] Message request from user ${userId} to club ${clubId}`);
 
         // Normalize message type to match schema enum
-        const validTypes = ['text', 'image', 'video', 'document', 'media', 'file'];
+        const validTypes = ['text', 'image', 'video', 'document', 'media', 'file', 'poll', 'spinner'];
         if (type && !validTypes.includes(type)) {
             type = req.file ? 'media' : 'text';
         }
+
+        const { pollData, spinnerData } = req.body;
 
         // Check if user is a member
         const user = await User.findById(userId);
@@ -188,7 +190,7 @@ exports.sendGroupMessage = async (req, res) => {
 
         const newMessage = {
             senderId: userId,
-            content: content || (fileUrl ? 'Sent an attachment' : ''),
+            content: content || (fileUrl ? 'Sent an attachment' : type === 'poll' ? 'Created a poll' : type === 'spinner' ? 'Started a spinner' : ''),
             type: type || (fileUrl ? 'media' : 'text'),
             fileUrl: fileUrl ? {
                 url: typeof fileUrl === 'string' ? fileUrl : fileUrl.url,
@@ -197,6 +199,8 @@ exports.sendGroupMessage = async (req, res) => {
                 fileSize: fileSize || (typeof fileUrl === 'object' ? fileUrl.fileSize : 0),
                 mimeType: (typeof fileUrl === 'object' ? fileUrl.mimeType : 'image/jpeg')
             } : null,
+            pollData: type === 'poll' ? (typeof pollData === 'string' ? JSON.parse(pollData) : pollData) : undefined,
+            spinnerData: type === 'spinner' ? (typeof spinnerData === 'string' ? JSON.parse(spinnerData) : spinnerData) : undefined,
             replyTo: (replyTo && replyTo !== 'null' && replyTo !== '') ? replyTo : undefined,
             createdAt: new Date()
         };
@@ -586,5 +590,116 @@ exports.addReaction = async (req, res) => {
             success: false,
             message: 'Error adding reaction'
         });
+    }
+};
+
+/**
+ * @desc    Vote on a poll
+ * @route   POST /api/group-chat/:clubId/messages/:messageId/vote
+ * @access  Private (Club Members)
+ */
+exports.votePoll = async (req, res) => {
+    try {
+        const { clubId, messageId } = req.params;
+        const { optionIndex } = req.body;
+        const userId = req.user._id;
+
+        const groupChat = await GroupChat.findOne({ clubId });
+        if (!groupChat) return res.status(404).json({ success: false, message: 'Group chat not found' });
+
+        const message = groupChat.messages.id(messageId);
+        if (!message || message.type !== 'poll') return res.status(404).json({ success: false, message: 'Poll not found' });
+
+        // Logic check: multiple choices/max votes
+        const maxVotes = message.pollData.maxVotes || 1;
+
+        // Count total votes by this user in this poll
+        let userTotalVotes = 0;
+        message.pollData.options.forEach(opt => {
+            if (opt.votes.includes(userId)) userTotalVotes++;
+        });
+
+        // Toggle vote for the specific option
+        const alreadyVotedIndex = message.pollData.options[optionIndex].votes.indexOf(userId);
+
+        if (alreadyVotedIndex > -1) {
+            // Remove vote
+            message.pollData.options[optionIndex].votes.splice(alreadyVotedIndex, 1);
+        } else {
+            // Check if user hit their limit
+            if (userTotalVotes >= maxVotes) {
+                // If maxVotes is 1, we replace their existing vote
+                if (maxVotes === 1) {
+                    message.pollData.options.forEach(opt => {
+                        const idx = opt.votes.indexOf(userId);
+                        if (idx > -1) opt.votes.splice(idx, 1);
+                    });
+                } else {
+                    return res.status(400).json({ success: false, message: `You can only vote for ${maxVotes} options` });
+                }
+            }
+            // Add vote
+            message.pollData.options[optionIndex].votes.push(userId);
+        }
+
+        await groupChat.save();
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${clubId}`).emit('group:message:update', {
+                clubId,
+                messageId,
+                pollData: message.pollData
+            });
+        }
+
+        res.status(200).json({ success: true, pollData: message.pollData });
+    } catch (error) {
+        console.error('Error voting on poll:', error);
+        res.status(500).json({ success: false, message: 'Error voting' });
+    }
+};
+
+/**
+ * @desc    Update spinner state or result
+ * @route   PUT /api/group-chat/:clubId/messages/:messageId/spin
+ * @access  Private (Club Members)
+ */
+exports.updateSpinner = async (req, res) => {
+    try {
+        const { clubId, messageId } = req.params;
+        const { status, result } = req.body;
+        const userId = req.user._id;
+
+        const groupChat = await GroupChat.findOne({ clubId });
+        if (!groupChat) return res.status(404).json({ success: false, message: 'Group chat not found' });
+
+        const message = groupChat.messages.id(messageId);
+        if (!message || message.type !== 'spinner') return res.status(404).json({ success: false, message: 'Spinner not found' });
+
+        // Only sender can start/set result (or maybe anyone?) 
+        // User request: "sender can speen only"
+        if (message.senderId.toString() !== userId.toString()) {
+            return res.status(403).json({ success: false, message: 'Only the creator can spin' });
+        }
+
+        if (status) message.spinnerData.status = status;
+        if (result) message.spinnerData.result = result;
+
+        await groupChat.save();
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${clubId}`).emit('group:message:update', {
+                clubId,
+                messageId,
+                spinnerData: message.spinnerData
+            });
+        }
+
+        res.status(200).json({ success: true, spinnerData: message.spinnerData });
+    } catch (error) {
+        console.error('Error updating spinner:', error);
+        res.status(500).json({ success: false, message: 'Error updating spinner' });
     }
 };

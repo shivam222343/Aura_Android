@@ -24,8 +24,21 @@ const messageSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['text', 'image', 'file', 'voice', 'media', 'document'],
+        enum: ['text', 'image', 'file', 'voice', 'media', 'document', 'poll', 'spinner'],
         default: 'text'
+    },
+    pollData: {
+        question: String,
+        options: [{
+            text: String,
+            votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+        }],
+        maxVotes: { type: Number, default: 1 }
+    },
+    spinnerData: {
+        items: [String],
+        result: String,
+        status: { type: String, enum: ['idle', 'spinning', 'completed'], default: 'idle' }
     },
     fileUrl: {
         url: String,
