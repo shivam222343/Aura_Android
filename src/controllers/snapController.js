@@ -250,6 +250,7 @@ exports.getClubSnaps = async (req, res) => {
         // Group by user
         const userSnaps = new Map();
         snaps.forEach(snap => {
+            if (!snap.senderId) return; // Skip snaps with deleted users
             const snapSenderId = snap.senderId._id.toString();
             if (!userSnaps.has(snapSenderId)) {
                 userSnaps.set(snapSenderId, {
@@ -308,6 +309,7 @@ exports.getMySnaps = async (req, res) => {
         // Group by user
         const userSnaps = new Map();
         snaps.forEach(snap => {
+            if (!snap.senderId) return; // Skip snaps with deleted users
             const snapSenderId = snap.senderId._id.toString();
             if (!userSnaps.has(snapSenderId)) {
                 userSnaps.set(snapSenderId, {

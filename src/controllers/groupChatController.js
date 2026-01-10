@@ -701,20 +701,22 @@ exports.votePoll = async (req, res) => {
 
         await groupChat.save();
 
-        // Invalidate caches
-        await delCacheByPattern(`groupchat:${clubId}:*`);
-        await delCacheByPattern(`poll:voters:${messageId}:*`);
-
         const io = req.app.get('io');
         if (io) {
             io.to(`club:${clubId}`).emit('group:message:update', {
-                clubId,
                 messageId,
                 pollData: message.pollData
             });
         }
 
-        res.status(200).json({ success: true, pollData: message.pollData });
+        // Invalidate caches (Background - don't block response)
+        delCacheByPattern(`groupchat:${clubId}:*`).catch(err => console.error('Redis cache clear error:', err));
+        delCacheByPattern(`poll:voters:${messageId}:*`).catch(err => console.error('Redis cache clear error:', err));
+
+        res.status(200).json({
+            success: true,
+            pollData: message.pollData
+        });
     } catch (error) {
         console.error('Error voting on poll:', error);
         res.status(500).json({ success: false, message: 'Error voting' });
