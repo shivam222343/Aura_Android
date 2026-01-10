@@ -674,6 +674,12 @@ exports.votePoll = async (req, res) => {
 
         await groupChat.save();
 
+        // Invalidate poll voter caches for all options in this poll
+        // (Since a vote might have been removed from one and added to another if maxVotes=1)
+        for (let i = 0; i < message.pollData.options.length; i++) {
+            await delCache(`poll:voters:${messageId}:${i}`);
+        }
+
         const io = req.app.get('io');
         if (io) {
             io.to(`club:${clubId}`).emit('group:message:update', {
