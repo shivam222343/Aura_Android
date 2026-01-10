@@ -194,11 +194,13 @@ io.on('connection', (socket) => {
             const caller = await User.findById(senderId).select('displayName profilePicture email');
 
             // Notify all recipients
+            const roomId = `call-${senderId}-${Date.now()}`;
+
             recipientIds.forEach(recipientId => {
                 io.to(recipientId).emit('call:incoming', {
                     caller,
                     type, // 'audio' | 'video'
-                    roomId: isGroup ? `group-call-${senderId}-${Date.now()}` : null,
+                    roomId, // Unique Room ID for Jitsi
                     isGroup
                 });
             });
@@ -227,10 +229,18 @@ io.on('connection', (socket) => {
 
     // 4. End Call
     socket.on('call:end', (data) => {
-        const { to } = data; // Can be a userId or a roomId (future)
-        if (to) {
+        const { to, roomId } = data; // 'to' can be array or string
+
+        if (Array.isArray(to)) {
+            to.forEach(id => io.to(id).emit('call:ended', { by: socket.userId }));
+        } else if (to) {
             io.to(to).emit('call:ended', { by: socket.userId });
         }
+
+        if (roomId) {
+            io.to(roomId).emit('call:ended', { by: socket.userId });
+        }
+        console.log(`📞 Call ended by ${socket.userId}`);
     });
 
     // 5. WebRTC Signaling (Placeholder for future P2P)
