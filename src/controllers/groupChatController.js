@@ -43,17 +43,7 @@ exports.getGroupChat = async (req, res) => {
             query = query.slice('messages', -parseInt(limit));
         }
 
-        const cacheKey = `groupchat:${clubId}:${limit || 'full'}`;
-        let groupChat = await getCache(cacheKey);
-        let fromCache = true;
-
-        if (!groupChat) {
-            groupChat = await query;
-            if (groupChat) {
-                await setCache(cacheKey, groupChat, 300); // Cache for 5 mins
-                fromCache = false;
-            }
-        }
+        let groupChat = await query;
 
         let unreadCount = 0;
         if (groupChat && limit) {
@@ -126,8 +116,7 @@ exports.getGroupChat = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            data: groupChat,
-            source: fromCache ? 'cache' : 'database'
+            data: groupChat
         });
     } catch (error) {
         console.error('Error fetching group chat:', error);
@@ -238,9 +227,6 @@ exports.sendGroupMessage = async (req, res) => {
         };
 
         await groupChat.save();
-
-        // Invalidate caches
-        await delCacheByPattern(`groupchat:${clubId}:*`);
 
         // Instead of populating the whole chat (slow), just get the sender info
         const senderInfo = await User.findById(userId).select('displayName profilePicture');
@@ -360,9 +346,6 @@ exports.sendBase64GroupMessage = async (req, res) => {
         groupChat.messages.push(newMessage);
         await groupChat.save();
 
-        // Invalidate caches
-        await delCacheByPattern(`groupchat:${clubId}:*`);
-
         const senderInfo = await User.findById(userId).select('displayName profilePicture');
         const lastSavedMessage = groupChat.messages[groupChat.messages.length - 1];
         const populatedMessage = {
@@ -425,9 +408,6 @@ exports.markGroupMessagesRead = async (req, res) => {
         });
 
         await groupChat.save();
-
-        // Invalidate caches
-        await delCacheByPattern(`groupchat:${clubId}:*`);
 
         // Notify others that a user has read messages via socket
         const io = req.app.get('io');
@@ -513,9 +493,6 @@ exports.deleteGroupMessage = async (req, res) => {
         }
 
         await groupChat.save();
-
-        // Invalidate caches
-        await delCacheByPattern(`groupchat:${clubId}:*`);
 
         // Emit socket event to the club room if deleted for everyone
         const io = req.app.get('io');
@@ -618,10 +595,6 @@ exports.addReaction = async (req, res) => {
 
         await groupChat.save();
 
-        // Invalidate caches
-        await delCacheByPattern(`groupchat:${clubId}:*`);
-        await delCache(`chat:viewers:${messageId}`);
-
         // Populate the reactions user info before emitting
         const populatedGroupChat = await GroupChat.findOne({ clubId })
             .populate('messages.reactions.userId', 'displayName profilePicture');
@@ -704,19 +677,13 @@ exports.votePoll = async (req, res) => {
         const io = req.app.get('io');
         if (io) {
             io.to(`club:${clubId}`).emit('group:message:update', {
+                clubId,
                 messageId,
                 pollData: message.pollData
             });
         }
 
-        // Invalidate caches (Background - don't block response)
-        delCacheByPattern(`groupchat:${clubId}:*`).catch(err => console.error('Redis cache clear error:', err));
-        delCacheByPattern(`poll:voters:${messageId}:*`).catch(err => console.error('Redis cache clear error:', err));
-
-        res.status(200).json({
-            success: true,
-            pollData: message.pollData
-        });
+        res.status(200).json({ success: true, pollData: message.pollData });
     } catch (error) {
         console.error('Error voting on poll:', error);
         res.status(500).json({ success: false, message: 'Error voting' });
@@ -750,9 +717,6 @@ exports.updateSpinner = async (req, res) => {
         if (result) message.spinnerData.result = result;
 
         await groupChat.save();
-
-        // Invalidate caches
-        await delCacheByPattern(`groupchat:${clubId}:*`);
 
         const io = req.app.get('io');
         if (io) {
