@@ -97,7 +97,14 @@ module.exports = (io, socket) => {
                 title: 'New Game Hosted! 🎮',
                 message: randomMsg,
                 clubId: clubId,
-                data: { roomId, screen: 'SketchHeads', gameType },
+                data: {
+                    screen: 'MaverickGames',
+                    params: {
+                        autoOpenLobby: true,
+                        roomId,
+                        gameType
+                    }
+                },
                 priority: 'medium'
             }));
 
@@ -114,7 +121,15 @@ module.exports = (io, socket) => {
                     clubId,
                     'New Game Hosted! 🎮',
                     randomMsg,
-                    { screen: 'SketchHeads', roomId, gameType, senderId: userId }
+                    {
+                        screen: 'MaverickGames',
+                        params: {
+                            autoOpenLobby: true,
+                            roomId,
+                            gameType
+                        },
+                        senderId: userId
+                    }
                 );
             }
         } catch (error) {
