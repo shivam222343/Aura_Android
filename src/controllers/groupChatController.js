@@ -3,6 +3,7 @@ const Club = require('../models/Club');
 const User = require('../models/User');
 const { uploadImageBuffer } = require('../config/cloudinary');
 const { getCache, setCache, delCache } = require('../utils/cache');
+const { sendClubPushNotification } = require('../utils/pushNotifications');
 
 /**
  * @desc    Get group chat for a club
@@ -263,6 +264,25 @@ exports.sendGroupMessage = async (req, res) => {
             data: populatedMessage
         });
 
+        // Send Push Notification asynchronously to club members
+        try {
+            const club = await Club.findById(clubId).select('name');
+            await sendClubPushNotification(
+                clubId,
+                `${user.displayName} in ${club.name}`,
+                newMessage.content,
+                {
+                    screen: 'Chat',
+                    params: { clubId, isGroup: true, clubName: club.name },
+                    senderId: userId,
+                    category: 'chat-reply',
+                    clubId: clubId.toString()
+                }
+            );
+        } catch (pushErr) {
+            console.error('[GroupChat] Push notification error:', pushErr);
+        }
+
         // Handle AI Mention asynchronously
         if (content && /@Eta/i.test(content)) {
             console.log(`[GroupChat] AI Mention detected in club ${clubId}`);
@@ -375,6 +395,25 @@ exports.sendBase64GroupMessage = async (req, res) => {
         }
 
         res.status(201).json({ success: true, data: populatedMessage });
+
+        // Send Push Notification
+        try {
+            const club = await Club.findById(clubId).select('name');
+            await sendClubPushNotification(
+                clubId,
+                `${user.displayName} in ${club.name}`,
+                'Sent an attachment',
+                {
+                    screen: 'Chat',
+                    params: { clubId, isGroup: true, clubName: club.name },
+                    senderId: userId,
+                    category: 'chat-reply',
+                    clubId: clubId.toString()
+                }
+            );
+        } catch (pushErr) {
+            console.error('[GroupChat] Base64 push notification error:', pushErr);
+        }
     } catch (error) {
         console.error('Error sending base64 group message:', error);
         res.status(500).json({ success: false, message: 'Error sending message' });

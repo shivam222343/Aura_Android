@@ -28,7 +28,8 @@ const notificationSchema = new mongoose.Schema({
             'attendance_marked',
             'gallery_upload',
             'gallery_approved',
-            'admin_custom_notification'
+            'admin_custom_notification',
+            'game_hosted'
         ]
     },
     title: {

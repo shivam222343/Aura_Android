@@ -80,6 +80,47 @@ module.exports = (io, socket) => {
             roomId,
             gameType
         });
+
+        // 📝 Save Persistent Notification to Database and Trigger Refresh
+        try {
+            const Notification = require('../models/Notification');
+            const { sendClubPushNotification } = require('../utils/pushNotifications');
+
+            // Find all club members except host
+            const members = await User.find({
+                'clubsJoined.clubId': clubId,
+                _id: { $ne: userId }
+            });
+
+            const notifications = members.map(m => ({
+                userId: m._id,
+                type: 'game_hosted',
+                title: 'New Game Hosted! 🎮',
+                message: randomMsg,
+                clubId: clubId,
+                data: { roomId, screen: 'SketchHeads', gameType },
+                priority: 'medium'
+            }));
+
+            if (notifications.length > 0) {
+                await Notification.insertMany(notifications);
+
+                // Signal each member to refresh their notification count via their personal room
+                members.forEach(m => {
+                    io.to(m._id.toString()).emit('notification_receive', {});
+                });
+
+                // Send External Push Notifications
+                await sendClubPushNotification(
+                    clubId,
+                    'New Game Hosted! 🎮',
+                    randomMsg,
+                    { screen: 'SketchHeads', roomId, gameType, senderId: userId }
+                );
+            }
+        } catch (error) {
+            console.error('❌ Error saving game hosted notification:', error);
+        }
     });
 
     // 🤝 Join a Game

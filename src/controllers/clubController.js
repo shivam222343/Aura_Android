@@ -1,5 +1,7 @@
 const Club = require('../models/Club');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
+const { sendPushNotification } = require('../utils/pushNotifications');
 const { uploadImageBuffer } = require('../config/cloudinary');
 const { getCache, setCache, delCache } = require('../utils/cache');
 
@@ -297,7 +299,7 @@ exports.addMemberToClub = async (req, res) => {
             });
         }
 
-        // Emit socket event for real-time update
+        // Emit socket event for real-time members update
         const io = req.app.get('io');
         if (io) {
             io.to(`club:${clubId}`).emit('club:members:update', { clubId });
@@ -305,6 +307,25 @@ exports.addMemberToClub = async (req, res) => {
 
         // Invalidate club members cache
         await delCache(`club:members:${clubId}`);
+
+        // Create Persistent Notification
+        await Notification.create({
+            userId: user._id,
+            type: 'member_added',
+            title: `Welcome to ${club.name}! 🎊`,
+            message: `You have been added to the club ${club.name} as a ${user.role}.`,
+            clubId: clubId
+        });
+
+        // Trigger in-app refresh for the user
+        io?.to(user._id.toString()).emit('notification_receive', {});
+
+        // Send Push Notification
+        await sendPushNotification(user._id, {
+            title: `Welcome to ${club.name}! 🎊`,
+            body: `You are now a member of ${club.name}.`,
+            data: { screen: 'Dashboard', clubId: clubId }
+        });
 
         res.status(200).json({
             success: true,
@@ -423,7 +444,7 @@ exports.removeMemberFromClub = async (req, res) => {
             await groupChat.save();
         }
 
-        // Emit socket event for real-time update
+        // Emit socket event for real-time members update
         const io = req.app.get('io');
         if (io) {
             io.to(`club:${clubId}`).emit('club:members:update', { clubId });
@@ -431,6 +452,13 @@ exports.removeMemberFromClub = async (req, res) => {
 
         // Invalidate club members cache
         await delCache(`club:members:${clubId}`);
+
+        // Send Push Notification (User removed)
+        await sendPushNotification(userId, {
+            title: `Removed from ${club.name}`,
+            body: `You have been removed from the club ${club.name}.`,
+            data: { screen: 'Dashboard' }
+        });
 
         res.status(200).json({
             success: true,

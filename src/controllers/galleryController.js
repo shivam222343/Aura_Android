@@ -3,7 +3,7 @@ const Gallery = require('../models/Gallery');
 const Club = require('../models/Club');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
-const { sendPushNotification, sendPushNotificationToMany } = require('../utils/notifications');
+const { sendPushNotification, sendPushNotificationToMany } = require('../utils/pushNotifications');
 const { uploadImageBuffer: uploadToCloudinary } = require('../config/cloudinary');
 const { getCache, setCache, delCache, delCacheByPattern } = require('../utils/cache');
 
@@ -78,8 +78,8 @@ exports.uploadImage = async (req, res) => {
                 await Notification.insertMany(adminNotifs);
                 await sendPushNotificationToMany(adminIds, {
                     title: 'New Gallery Upload 📸',
-                    body: `${req.user.displayName} just uploaded a new image. Check it for approval!`,
-                    data: { imageId: newImage._id.toString() }
+                    body: `${req.user.displayName} just uploaded a new image for "${title || 'Untitled'}".`,
+                    data: { screen: 'Admin', params: { tab: 'Gallery' }, imageId: newImage._id.toString() }
                 });
             }
         } catch (notifError) {
@@ -150,8 +150,8 @@ exports.uploadBase64Image = async (req, res) => {
                 await Notification.insertMany(adminNotifs);
                 await sendPushNotificationToMany(adminIds, {
                     title: 'New Gallery Upload 📸',
-                    body: `${req.user.displayName} just uploaded a new image. Check it for approval!`,
-                    data: { imageId: newImage._id.toString() }
+                    body: `${req.user.displayName} just uploaded a new image for "${title || 'Untitled'}".`,
+                    data: { screen: 'Admin', params: { tab: 'Gallery' }, imageId: newImage._id.toString() }
                 });
             }
         } catch (notifError) {
@@ -253,7 +253,7 @@ exports.updateImageStatus = async (req, res) => {
                     // I'll do push only for everyone, and DB notif only for the uploader (to say your image is live)
 
                     // Notify uploader
-                    const uploaderNotif = await Notification.create({
+                    await Notification.create({
                         userId: image.uploadedBy,
                         type: 'gallery_approved',
                         title: 'Image Approved! 🎉',
@@ -261,16 +261,34 @@ exports.updateImageStatus = async (req, res) => {
                         relatedId: image._id,
                         relatedModel: 'Gallery'
                     });
+
                     await sendPushNotification(image.uploadedBy, {
                         title: 'Image Approved! 🎉',
-                        body: `Your image is now live in the gallery.`,
-                        data: { imageId: image._id.toString() }
+                        body: `Your image "${image.title || 'Untitled'}" is now live in the gallery.`,
+                        data: { screen: 'Gallery', params: { focusImageId: image._id.toString() }, imageId: image._id.toString() }
                     });
+
+                    // Create persistent notifications for all other users as well
+                    const otherNotifs = userIds.map(userId => ({
+                        userId,
+                        type: 'gallery_upload',
+                        title: 'New Gallery Photo 📸',
+                        message: `${req.user.displayName} shared a new moment in the gallery.`,
+                        relatedId: image._id,
+                        relatedModel: 'Gallery'
+                    }));
+                    await Notification.insertMany(otherNotifs);
+
+                    // Trigger frontend refresh for all users
+                    const io = req.app.get('io');
+                    if (io) {
+                        userIds.forEach(uid => io.to(uid.toString()).emit('notification_receive', {}));
+                    }
 
                     await sendPushNotificationToMany(userIds, {
                         title: 'New Gallery Photo 📸',
-                        body: 'Someone just shared a new moment in the gallery. Check it out!',
-                        data: { imageId: image._id.toString() }
+                        body: `${req.user.displayName} shared a new moment in the gallery.`,
+                        data: { screen: 'Gallery', params: { focusImageId: image._id.toString() }, imageId: image._id.toString() }
                     });
                 }
             } catch (notifError) {

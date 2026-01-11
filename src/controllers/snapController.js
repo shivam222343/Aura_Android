@@ -1,7 +1,8 @@
 const Snap = require('../models/Snap');
 const User = require('../models/User');
 const { uploadImageBuffer } = require('../config/cloudinary');
-const { sendPushNotificationToMany } = require('../utils/notifications');
+const { sendPushNotificationToMany, sendPushNotification } = require('../utils/pushNotifications');
+const Notification = require('../models/Notification');
 const Club = require('../models/Club');
 
 /**
@@ -96,7 +97,22 @@ exports.uploadSnap = async (req, res) => {
             }
 
             if (targetUserIds.length > 0) {
-                sendPushNotificationToMany(targetUserIds, {
+                // Persistent notifications
+                const notifications = targetUserIds.map(userId => ({
+                    userId,
+                    type: 'new_message',
+                    title: 'New Snap!',
+                    message: `${populatedSnap.senderId.displayName} shared a new snap`,
+                    relatedId: snap._id,
+                    relatedModel: 'Snap',
+                    clubId: clubId
+                }));
+                await Notification.insertMany(notifications);
+
+                // Trigger in-app refresh
+                targetUserIds.forEach(uid => io?.to(uid.toString()).emit('notification_receive', {}));
+
+                await sendPushNotificationToMany(targetUserIds, {
                     title: 'New Snap!',
                     body: `${populatedSnap.senderId.displayName} shared a new snap`,
                     data: { screen: 'Messages', params: { selectedClub: clubId } }
@@ -199,7 +215,22 @@ exports.uploadBase64Snap = async (req, res) => {
             }
 
             if (targetUserIds.length > 0) {
-                sendPushNotificationToMany(targetUserIds, {
+                // Persistent notifications
+                const notifications = targetUserIds.map(userId => ({
+                    userId,
+                    type: 'new_message',
+                    title: 'New Snap!',
+                    message: `${populatedSnap.senderId.displayName} shared a new snap`,
+                    relatedId: snap._id,
+                    relatedModel: 'Snap',
+                    clubId: clubId
+                }));
+                await Notification.insertMany(notifications);
+
+                // Trigger in-app refresh
+                targetUserIds.forEach(uid => io?.to(uid.toString()).emit('notification_receive', {}));
+
+                await sendPushNotificationToMany(targetUserIds, {
                     title: 'New Snap!',
                     body: `${populatedSnap.senderId.displayName} shared a new snap`,
                     data: { screen: 'Messages', params: { selectedClub: clubId } }
@@ -489,7 +520,20 @@ exports.toggleLike = async (req, res) => {
             try {
                 const liker = await User.findById(userId).select('displayName');
                 if (liker) {
-                    sendPushNotificationToMany([snap.senderId], {
+                    await Notification.create({
+                        userId: snap.senderId,
+                        type: 'new_message',
+                        title: 'Snap Liked! ❤️',
+                        message: `${liker.displayName} liked your snap`,
+                        relatedId: snap._id,
+                        relatedModel: 'Snap'
+                    });
+
+                    // Trigger in-app refresh
+                    const io = req.app.get('io');
+                    io?.to(snap.senderId.toString()).emit('notification_receive', {});
+
+                    await sendPushNotification(snap.senderId, {
                         title: 'Snap Liked! ❤️',
                         body: `${liker.displayName} liked your snap`,
                         data: { screen: 'Messages', params: { viewSnapId: snapId } }

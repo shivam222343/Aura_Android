@@ -80,6 +80,7 @@ const sendPushNotification = async (pushToken, { title, body, data = {} }) => {
                 notification: {
                     sound: 'default',
                     channelId: 'default',
+                    clickAction: data.category || 'default'
                 },
             },
             apns: {
@@ -87,6 +88,7 @@ const sendPushNotification = async (pushToken, { title, body, data = {} }) => {
                     aps: {
                         sound: 'default',
                         badge: 1,
+                        category: data.category || 'default'
                     },
                 },
             },

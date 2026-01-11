@@ -166,6 +166,51 @@ router.post('/:clubId/join', protect, async (req, res) => {
             }
         });
 
+        // Notify Admins of the Club
+        try {
+            const { sendPushNotificationToMany } = require('../utils/pushNotifications');
+            const Notification = require('../models/Notification');
+
+            const admins = await User.find({
+                'clubsJoined': {
+                    $elemMatch: { clubId: clubId, role: 'admin' }
+                }
+            }).select('_id');
+
+            const adminIds = admins.map(a => a._id);
+
+            if (adminIds.length > 0) {
+                const adminNotifs = adminIds.map(adminId => ({
+                    userId: adminId,
+                    type: 'member_joined',
+                    title: 'New Club Member! 👤',
+                    message: `${req.user.displayName} has joined ${club.name}.`,
+                    clubId: clubId,
+                    relatedId: userId,
+                    relatedModel: 'User'
+                }));
+                await Notification.insertMany(adminNotifs);
+
+                await sendPushNotificationToMany(adminIds, {
+                    title: 'New Club Member! 👤',
+                    body: `${req.user.displayName} has joined ${club.name}.`,
+                    data: {
+                        screen: 'Admin',
+                        params: { tab: 'Members', focusUserId: userId.toString() },
+                        clubId: clubId.toString()
+                    }
+                });
+
+                // Signal each admin to refresh
+                const io = req.app.get('io');
+                if (io) {
+                    adminIds.forEach(aid => io.to(aid.toString()).emit('notification_receive', {}));
+                }
+            }
+        } catch (notifErr) {
+            console.error('Error sending club join notification:', notifErr);
+        }
+
         res.json({
             success: true,
             message: 'Successfully joined the club'

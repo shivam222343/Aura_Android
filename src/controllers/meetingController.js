@@ -125,8 +125,14 @@ exports.createMeeting = async (req, res) => {
         await sendClubPushNotification(
             clubId,
             `New Meeting: ${meeting.name}`,
-            `A new meeting has been scheduled for ${new Date(meeting.date).toLocaleDateString()} at ${meeting.time}.`,
-            { type: 'meeting_created', meetingId: meeting._id, senderId: req.user._id }
+            `${club.name} has scheduled a new ${type || 'General'} meeting for ${new Date(meeting.date).toLocaleDateString()} at ${meeting.time}.`,
+            {
+                type: 'meeting_created',
+                screen: 'Calendar',
+                params: { selectedMeetingId: meeting._id.toString(), clubId: clubId.toString() },
+                meetingId: meeting._id.toString(),
+                senderId: req.user._id.toString()
+            }
         );
 
     } catch (error) {
@@ -220,8 +226,13 @@ exports.updateMeetingStatus = async (req, res) => {
             await sendClubPushNotification(
                 meeting.clubId,
                 `Meeting Canceled: ${meeting.name}`,
-                `The meeting "${meeting.name}" has been canceled.`,
-                { type: 'meeting_cancelled', meetingId: meeting._id }
+                `The meeting "${meeting.name}" for ${club.name} has been canceled.`,
+                {
+                    type: 'meeting_cancelled',
+                    screen: 'Calendar',
+                    params: { selectedMeetingId: meeting._id.toString(), clubId: meeting.clubId.toString() },
+                    meetingId: meeting._id.toString()
+                }
             );
         }
     } catch (error) {
@@ -308,18 +319,24 @@ exports.getClubMeetings = async (req, res) => {
             .populate('createdBy', 'displayName')
             .populate('attendees.userId', 'displayName maverickId profilePicture');
 
-        // Separate into Upcoming and Past based on status and date
         const now = new Date();
-        const upcoming = meetings.filter(m =>
-            m.status === 'upcoming' ||
-            m.status === 'ongoing' ||
-            new Date(m.date) >= now
-        );
-        const past = meetings.filter(m =>
-            !upcoming.some(u => u._id.toString() === m._id.toString())
-        ).reverse(); // Most recent past first
 
-        const result = { upcoming, past };
+        // Strictly categorize based on status, with date as a fallback
+        const upcoming = meetings.filter(m =>
+            (m.status === 'upcoming' || m.status === 'ongoing') &&
+            !(m.status === 'completed' || m.status === 'canceled' || m.status === 'cancelled')
+        );
+
+        const past = meetings.filter(m =>
+            m.status === 'completed' ||
+            (!['upcoming', 'ongoing', 'canceled', 'cancelled'].includes(m.status) && new Date(m.date) < now)
+        ).reverse(); // Most recent first
+
+        const canceled = meetings.filter(m =>
+            m.status === 'canceled' || m.status === 'cancelled'
+        ).reverse();
+
+        const result = { upcoming, past, canceled };
 
         await setCache(cacheKey, result, 1800); // Cache for 30 minutes
 
@@ -444,6 +461,18 @@ exports.markAttendance = async (req, res) => {
             message: 'Attendance marked successfully!'
         });
 
+        // Push notification to user
+        await sendPushNotification(req.user._id, {
+            title: 'Attendance Marked! ✅',
+            body: `You have successfully marked your attendance for "${meeting.name}".`,
+            data: {
+                type: 'attendance_marked',
+                screen: 'Meetings',
+                params: { meetingId: meeting._id.toString() },
+                meetingId: meeting._id.toString()
+            }
+        });
+
         // Emit socket event to admin (so they see real-time attendee list)
         // Include user details for instant frontend update
         emitToClub(req, meeting.clubId, 'attendance_marked', {
@@ -512,6 +541,26 @@ exports.manualAttendance = async (req, res) => {
         }
 
         res.status(200).json({ success: true, message: 'Attendance updated' });
+
+        // Push notification to each user
+        try {
+            for (const uid of userIds) {
+                if (status === 'present') {
+                    await sendPushNotification(uid, {
+                        title: 'Attendance Marked! ✅',
+                        body: `An admin has marked you present for "${meeting.name}".`,
+                        data: {
+                            type: 'attendance_marked',
+                            screen: 'Meetings',
+                            params: { meetingId: meeting._id.toString() },
+                            meetingId: meeting._id.toString()
+                        }
+                    });
+                }
+            }
+        } catch (pushErr) {
+            console.error('Manual attendance push error:', pushErr);
+        }
 
         // Emit socket event for real-time update in attendee list
         emitToClub(req, meeting.clubId, 'attendance_updated_manual', {
