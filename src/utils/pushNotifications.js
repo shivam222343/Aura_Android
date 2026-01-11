@@ -3,64 +3,69 @@ const User = require('../models/User');
 const mongoose = require('mongoose');
 
 /**
- * Send push notification to a specific user
- * @param {string} userId - ID of the user to notify
- * @param {object} notification - { title, body, data }
+ * Get IO instance from req or app
  */
-exports.sendPushNotification = async (userId, notification) => {
+const getIO = (source) => {
+    if (!source) return null;
+    if (source.emit) return source; // already io
+    if (source.app) return source.app.get('io'); // req
+    if (source.get) return source.get('io'); // app
+    return null;
+};
+
+/**
+ * Send push notification to a specific user
+ */
+exports.sendPushNotification = async (userId, notification, socketSource = null) => {
     try {
         const title = notification.title;
         const body = notification.body || notification.message;
         const data = notification.data || {};
 
-        const user = await User.findById(userId).select('fcmToken');
-
-        if (!user || !user.fcmToken) {
-            console.log(`Push: User ${userId} has no push token.`);
-            return;
+        // 1. Send via Socket (Real-time pop-up)
+        const io = getIO(socketSource);
+        if (io) {
+            io.to(userId.toString()).emit('notification:receive', { title, message: body, data });
         }
 
-        // Native FCM tokens are long strings, no format check needed here
-        // The service handles errors if token is invalid
-        await sendPushNotification(user.fcmToken, {
-            title,
-            body,
-            data
-        });
-
+        // 2. Send via Push
+        const user = await User.findById(userId).select('fcmToken');
+        if (user && user.fcmToken) {
+            await sendPushNotification(user.fcmToken, { title, body, data });
+        }
     } catch (error) {
-        console.error('Error in only sendPushNotification:', error);
+        console.error('Error in sendPushNotification:', error);
     }
 };
 
 /**
  * Send push notification to all members of a club
- * @param {string} clubId - ID of the club
- * @param {string} title - Title
- * @param {string} body - Body
- * @param {object} data - Data (includes senderId to avoid self-notifying)
  */
-exports.sendClubPushNotification = async (clubId, title, body, data = {}) => {
+exports.sendClubPushNotification = async (clubId, title, body, data = {}, socketSource = null) => {
     try {
         const cid = typeof clubId === 'string' ? new mongoose.Types.ObjectId(clubId) : clubId;
         const query = { 'clubsJoined.clubId': cid };
-        if (data.senderId) {
-            query._id = { $ne: data.senderId };
-        }
+        if (data.senderId) query._id = { $ne: data.senderId };
 
         const users = await User.find(query).select('fcmToken');
 
-        const notifications = [];
-        for (let user of users) {
-            if (user.fcmToken) {
-                notifications.push({
-                    pushToken: user.fcmToken,
-                    title: title,
-                    body: body,
-                    data: data
-                });
-            }
+        // 1. Send via Socket
+        const io = getIO(socketSource);
+        if (io) {
+            // Emitting to the whole club room
+            // Client side logic should handle not showing if data.senderId === user._id
+            io.to(`club:${clubId}`).emit('notification:receive', {
+                title,
+                message: body,
+                data,
+                senderId: data.senderId
+            });
         }
+
+        // 2. Send via Push
+        const notifications = users
+            .filter(u => u.fcmToken)
+            .map(u => ({ pushToken: u.fcmToken, title, body, data }));
 
         if (notifications.length > 0) {
             await sendBulkPushNotifications(notifications);
@@ -72,32 +77,28 @@ exports.sendClubPushNotification = async (clubId, title, body, data = {}) => {
 
 /**
  * Send push notification to multiple users efficiently
- * @param {string[]} userIds - Array of user IDs
- * @param {object} notification - { title, body, data }
  */
-exports.sendPushNotificationToMany = async (userIds, notification) => {
+exports.sendPushNotificationToMany = async (userIds, notification, socketSource = null) => {
     try {
         const title = notification.title;
         const body = notification.body || notification.message;
         const data = notification.data || {};
 
+        // 1. Send via Socket
+        const io = getIO(socketSource);
+        if (io) {
+            userIds.forEach(uid => {
+                io.to(uid.toString()).emit('notification:receive', { title, message: body, data });
+            });
+        }
+
+        // 2. Send via Push
         const users = await User.find({
             _id: { $in: userIds },
             fcmToken: { $exists: true }
         }).select('fcmToken');
 
-        const notifications = [];
-        for (let user of users) {
-            if (user.fcmToken) {
-                notifications.push({
-                    pushToken: user.fcmToken,
-                    title: title,
-                    body: body,
-                    data: data
-                });
-            }
-        }
-
+        const notifications = users.map(u => ({ pushToken: u.fcmToken, title, body, data }));
         if (notifications.length > 0) {
             await sendBulkPushNotifications(notifications);
         }

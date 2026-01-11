@@ -112,6 +112,7 @@ exports.createMeeting = async (req, res) => {
 
         // Invalidate meetings cache
         await delCache(`club:meetings:${clubId}`);
+        await delCache('club:meetings:all');
 
         res.status(201).json({
             success: true,
@@ -132,7 +133,8 @@ exports.createMeeting = async (req, res) => {
                 params: { selectedMeetingId: meeting._id.toString(), clubId: clubId.toString() },
                 meetingId: meeting._id.toString(),
                 senderId: req.user._id.toString()
-            }
+            },
+            req
         );
 
     } catch (error) {
@@ -169,6 +171,7 @@ exports.updateMeeting = async (req, res) => {
 
         // Invalidate meetings cache
         await delCache(`club:meetings:${meeting.clubId}`);
+        await delCache('club:meetings:all');
 
         res.status(200).json({ success: true, data: meeting });
 
@@ -200,6 +203,7 @@ exports.updateMeetingStatus = async (req, res) => {
 
         // Invalidate meetings cache
         await delCache(`club:meetings:${meeting.clubId}`);
+        await delCache('club:meetings:all');
 
         res.status(200).json({ success: true, data: meeting });
 
@@ -232,7 +236,8 @@ exports.updateMeetingStatus = async (req, res) => {
                     screen: 'Calendar',
                     params: { selectedMeetingId: meeting._id.toString(), clubId: meeting.clubId.toString() },
                     meetingId: meeting._id.toString()
-                }
+                },
+                req
             );
         }
     } catch (error) {
@@ -260,6 +265,7 @@ exports.deleteMeeting = async (req, res) => {
 
         // Invalidate meetings cache
         await delCache(`club:meetings:${clubId}`);
+        await delCache('club:meetings:all');
 
         res.status(200).json({ success: true, message: 'Meeting deleted successfully' });
 
@@ -320,17 +326,22 @@ exports.getClubMeetings = async (req, res) => {
             .populate('attendees.userId', 'displayName maverickId profilePicture');
 
         const now = new Date();
+        const startOfToday = new Date(now);
+        startOfToday.setHours(0, 0, 0, 0);
 
-        // Strictly categorize based on status, with date as a fallback
-        const upcoming = meetings.filter(m =>
-            (m.status === 'upcoming' || m.status === 'ongoing') &&
-            !(m.status === 'completed' || m.status === 'canceled' || m.status === 'cancelled')
-        );
+        // Categorize based on status AND date
+        const upcoming = meetings.filter(m => {
+            const mDate = new Date(m.date);
+            // Must be upcoming/ongoing status AND (date is today or future OR status is ongoing)
+            return (m.status === 'upcoming' || m.status === 'ongoing') &&
+                (mDate >= startOfToday || m.status === 'ongoing');
+        });
 
-        const past = meetings.filter(m =>
-            m.status === 'completed' ||
-            (!['upcoming', 'ongoing', 'canceled', 'cancelled'].includes(m.status) && new Date(m.date) < now)
-        ).reverse(); // Most recent first
+        const past = meetings.filter(m => {
+            const mDate = new Date(m.date);
+            return m.status === 'completed' ||
+                ((m.status === 'upcoming' || m.status === 'ongoing') && mDate < startOfToday);
+        }).reverse(); // Most recent first
 
         const canceled = meetings.filter(m =>
             m.status === 'canceled' || m.status === 'cancelled'
@@ -471,7 +482,7 @@ exports.markAttendance = async (req, res) => {
                 params: { meetingId: meeting._id.toString() },
                 meetingId: meeting._id.toString()
             }
-        });
+        }, req);
 
         // Emit socket event to admin (so they see real-time attendee list)
         // Include user details for instant frontend update
@@ -555,7 +566,7 @@ exports.manualAttendance = async (req, res) => {
                             params: { meetingId: meeting._id.toString() },
                             meetingId: meeting._id.toString()
                         }
-                    });
+                    }, req);
                 }
             }
         } catch (pushErr) {
@@ -583,7 +594,7 @@ exports.getMeetingDetails = async (req, res) => {
         const meeting = await Meeting.findById(req.params.id)
             .populate('attendees.userId', 'displayName maverickId profilePicture');
 
-        if (!meeting) return res.status(404).json({ success: false, message: 'Not found' });
+        if (!meeting) return res.status(404).json({ success: false, message: 'Meeting not found' });
 
         res.status(200).json({ success: true, data: meeting });
     } catch (e) {

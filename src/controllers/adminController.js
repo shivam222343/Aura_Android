@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Club = require('../models/Club');
 const Meeting = require('../models/Meeting');
+const Game = require('../models/Game');
 
 /**
  * @desc    Get system stats
@@ -184,5 +185,48 @@ exports.sendCustomNotification = async (req, res) => {
             success: false,
             message: 'Error sending notification'
         });
+    }
+};
+/**
+ * @desc    Get all games configuration
+ * @route   GET /api/admin/games
+ * @access  Private
+ */
+exports.getGames = async (req, res) => {
+    try {
+        const games = await Game.find();
+        res.status(200).json({ success: true, data: games });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error fetching games' });
+    }
+};
+
+/**
+ * @desc    Update or create game config (poster)
+ * @route   POST /api/admin/games
+ * @access  Admin
+ */
+exports.updateGameConfig = async (req, res) => {
+    try {
+        const { gameId, name, posterUrl, description, players, tag, color } = req.body;
+
+        let game = await Game.findOne({ gameId });
+        if (game) {
+            game.posterUrl = posterUrl || game.posterUrl;
+            game.name = name || game.name;
+            game.description = description || game.description;
+            game.players = players || game.players;
+            game.tag = tag || game.tag;
+            game.color = color || game.color;
+            await game.save();
+        } else {
+            game = await Game.create({
+                gameId, name, posterUrl, description, players, tag, color
+            });
+        }
+
+        res.status(200).json({ success: true, data: game });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error updating game config' });
     }
 };

@@ -5,17 +5,24 @@ const {
     getStats,
     getAllUsers,
     changeUserRole,
-    sendCustomNotification
+    sendCustomNotification,
+    getGames,
+    updateGameConfig
 } = require('../controllers/adminController');
 const { getClubAttendanceReport } = require('../controllers/attendanceReportController');
 
 router.use(protect);
-router.use(authorize('admin')); // Restrict all routes to admin only
+
+// Publicly available within protected area
+router.get('/games', getGames);
+
+router.use(authorize('admin')); // Restrict remaining routes to admin only
 
 router.get('/stats', getStats);
 router.get('/users', getAllUsers);
 router.put('/users/:id/role', changeUserRole);
 router.post('/send-notification', sendCustomNotification);
+router.post('/games', updateGameConfig);
 router.get('/attendance-report/:clubId', getClubAttendanceReport);
 router.get('/reports', (req, res) => res.json({ message: 'Reports placeholder' }));
 

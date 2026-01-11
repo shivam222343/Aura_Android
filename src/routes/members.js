@@ -199,7 +199,7 @@ router.post('/:clubId/join', protect, async (req, res) => {
                         params: { tab: 'Members', focusUserId: userId.toString() },
                         clubId: clubId.toString()
                     }
-                });
+                }, req);
 
                 // Signal each admin to refresh
                 const io = req.app.get('io');

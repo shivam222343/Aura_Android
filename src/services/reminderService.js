@@ -57,7 +57,7 @@ const checkReminders = async (app) => {
                     title: `📋 ${title}`,
                     body,
                     data: { screen: 'Tasks', params: { focusTaskId: task._id.toString() }, taskId: task._id.toString(), type: 'task_reminder' }
-                });
+                }, app);
 
                 const io = app.get('io');
                 if (io) pendingUserIds.forEach(uid => io.to(uid).emit('notification_receive', {}));
@@ -106,7 +106,8 @@ const checkReminders = async (app) => {
                             screen: 'Calendar',
                             params: { selectedMeetingId: meeting._id.toString(), clubId: meeting.clubId._id.toString() },
                             meetingId: meeting._id.toString()
-                        }
+                        },
+                        app
                     );
 
                     const io = app.get('io');
@@ -122,8 +123,7 @@ const checkReminders = async (app) => {
     try {
         const meetingsToComplete = await Meeting.find({
             status: { $in: ['upcoming', 'ongoing'] },
-            // Find meetings where (date + time) is older than 3 hours ago
-            // This is a safe buffer to ensure meeting is likely over
+            date: { $lte: now }
         });
 
         for (const meeting of meetingsToComplete) {

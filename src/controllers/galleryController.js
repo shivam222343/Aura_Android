@@ -80,7 +80,7 @@ exports.uploadImage = async (req, res) => {
                     title: 'New Gallery Upload 📸',
                     body: `${req.user.displayName} just uploaded a new image for "${title || 'Untitled'}".`,
                     data: { screen: 'Admin', params: { tab: 'Gallery' }, imageId: newImage._id.toString() }
-                });
+                }, req);
             }
         } catch (notifError) {
             console.error('Error sending admin notifications:', notifError);
@@ -152,7 +152,7 @@ exports.uploadBase64Image = async (req, res) => {
                     title: 'New Gallery Upload 📸',
                     body: `${req.user.displayName} just uploaded a new image for "${title || 'Untitled'}".`,
                     data: { screen: 'Admin', params: { tab: 'Gallery' }, imageId: newImage._id.toString() }
-                });
+                }, req);
             }
         } catch (notifError) {
             console.error('Error sending admin notifications:', notifError);
@@ -266,7 +266,7 @@ exports.updateImageStatus = async (req, res) => {
                         title: 'Image Approved! 🎉',
                         body: `Your image "${image.title || 'Untitled'}" is now live in the gallery.`,
                         data: { screen: 'Gallery', params: { focusImageId: image._id.toString() }, imageId: image._id.toString() }
-                    });
+                    }, req);
 
                     // Create persistent notifications for all other users as well
                     const otherNotifs = userIds.map(userId => ({
@@ -289,7 +289,7 @@ exports.updateImageStatus = async (req, res) => {
                         title: 'New Gallery Photo 📸',
                         body: `${req.user.displayName} shared a new moment in the gallery.`,
                         data: { screen: 'Gallery', params: { focusImageId: image._id.toString() }, imageId: image._id.toString() }
-                    });
+                    }, req);
                 }
             } catch (notifError) {
                 console.error('Error sending approval notifications:', notifError);

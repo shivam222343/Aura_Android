@@ -445,36 +445,43 @@ function startRoundTimer(io, roomId) {
     const room = gameRooms[roomId];
     if (!room) return;
 
+    // Clear any existing timer just in case
+    if (room.state.timer) {
+        clearInterval(room.state.timer);
+    }
+
     room.state.timeRemaining = room.config.roundTime;
 
-    const hintInterval = Math.floor(room.config.roundTime / room.state.currentWord.length);
+    const hintInterval = Math.floor(room.config.roundTime / Math.max(1, room.state.currentWord.length));
     let lastHintTime = room.state.timeRemaining;
     let allRevealed = false;
 
-    const timer = setInterval(() => {
-        if (!gameRooms[roomId]) {
-            clearInterval(timer);
+    room.state.timer = setInterval(() => {
+        const currentRoom = gameRooms[roomId];
+        if (!currentRoom || currentRoom.status !== 'playing') {
+            clearInterval(currentRoom?.state?.timer);
             return;
         }
 
-        room.state.timeRemaining--;
-        io.to(roomId).emit('game:time_update', room.state.timeRemaining);
+        currentRoom.state.timeRemaining--;
+        io.to(roomId).emit('game:time_update', currentRoom.state.timeRemaining);
 
         // Reveal all letters when 10 seconds remain
-        if (room.state.timeRemaining === 10 && !allRevealed) {
-            room.state.hint = room.state.currentWord.split('').join(' ');
-            io.to(roomId).emit('game:hint_update', room.state.hint);
+        if (currentRoom.state.timeRemaining === 10 && !allRevealed) {
+            currentRoom.state.hint = currentRoom.state.currentWord.split('').join(' ');
+            io.to(roomId).emit('game:hint_update', currentRoom.state.hint);
             allRevealed = true;
         }
-        // Reveal hint character progressively before that
-        else if (room.state.timeRemaining > 10 && room.state.timeRemaining <= lastHintTime - hintInterval) {
-            room.state.hint = revealNextCharacter(room.state.currentWord, room.state.hint);
-            io.to(roomId).emit('game:hint_update', room.state.hint);
-            lastHintTime = room.state.timeRemaining;
+        // Reveal hint character progressively
+        else if (currentRoom.state.timeRemaining > 10 && currentRoom.state.timeRemaining <= lastHintTime - hintInterval) {
+            currentRoom.state.hint = revealNextCharacter(currentRoom.state.currentWord, currentRoom.state.hint);
+            io.to(roomId).emit('game:hint_update', currentRoom.state.hint);
+            lastHintTime = currentRoom.state.timeRemaining;
         }
 
-        if (room.state.timeRemaining <= 0) {
-            clearInterval(timer);
+        if (currentRoom.state.timeRemaining <= 0) {
+            clearInterval(currentRoom.state.timer);
+            currentRoom.state.timer = null;
             endTurn(io, roomId);
         }
     }, 1000);
@@ -484,6 +491,12 @@ function endTurn(io, roomId) {
     const room = gameRooms[roomId];
     if (!room) return;
 
+    // CRITICAL: Clear timer to prevent multiple endTurn calls
+    if (room.state.timer) {
+        clearInterval(room.state.timer);
+        room.state.timer = null;
+    }
+
     io.to(roomId).emit('game:turn_end', {
         word: room.state.currentWord,
         scores: room.players.map(p => ({
@@ -491,16 +504,24 @@ function endTurn(io, roomId) {
             userName: p.userName,
             score: p.score,
             turnScore: p.turnScore || 0
-        }))
+        })).sort((a, b) => b.score - a.score)
     });
 
     // Wait 5 seconds before next turn
     setTimeout(() => {
-        if (gameRooms[roomId]) startNextTurn(io, roomId);
+        const stillExists = gameRooms[roomId];
+        if (stillExists && stillExists.status === 'playing') {
+            startNextTurn(io, roomId);
+        }
     }, 5000);
 }
 
 function endRound(io, roomId) {
+    const room = gameRooms[roomId];
+    if (room && room.state.timer) {
+        clearInterval(room.state.timer);
+        room.state.timer = null;
+    }
     endTurn(io, roomId);
 }
 
