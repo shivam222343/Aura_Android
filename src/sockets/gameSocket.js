@@ -6,12 +6,11 @@ module.exports = (io, socket) => {
     // 🎲 Get Active Rooms for a Club
     socket.on('games:get_rooms', (data) => {
         const { clubId, gameType } = data;
-        const activeRooms = Object.values(gameRooms).filter(r =>
-            r.clubId === clubId &&
-            r.gameType === gameType &&
-            r.status === 'lobby'
-        );
-        socket.emit('games:rooms_list', activeRooms);
+        const activeRooms = Object.values(gameRooms).filter(r => {
+            const clubMatch = clubId === 'all' || r.clubId === clubId || r.clubId === 'all';
+            return clubMatch && r.gameType === gameType && r.status === 'lobby';
+        });
+        socket.emit('games:rooms_list', { rooms: activeRooms, gameType });
     });
 
     // 🚀 Host a Game
@@ -327,11 +326,14 @@ module.exports = (io, socket) => {
             socket.leave(roomId);
 
             if (room.players.length === 0) {
+                console.log(`🧹 Empty room ${roomId} deleted after user left`);
                 delete gameRooms[roomId];
             } else {
                 if (room.hostId === socket.userId) {
-                    room.hostId = room.players[0].userId;
-                    room.hostName = room.players[0].userName;
+                    const newHost = room.players[0];
+                    room.hostId = newHost.userId;
+                    room.hostName = newHost.userName;
+                    console.log(`👑 New host assigned to room ${roomId}: ${room.hostName}`);
                 }
                 io.to(roomId).emit('game:update', room);
             }
@@ -344,11 +346,23 @@ module.exports = (io, socket) => {
     socket.on('disconnect', () => {
         Object.keys(gameRooms).forEach(roomId => {
             const room = gameRooms[roomId];
-            if (room.players.some(p => p.socketId === socket.id)) {
-                room.players = room.players.filter(p => p.socketId !== socket.id);
+            const playerIndex = room.players.findIndex(p => p.socketId === socket.id);
+
+            if (playerIndex !== -1) {
+                const leavingPlayer = room.players[playerIndex];
+                room.players.splice(playerIndex, 1);
+
+                console.log(`🔌 User ${leavingPlayer.userName} disconnected from room ${roomId}`);
+
                 if (room.players.length === 0) {
+                    console.log(`🧹 Empty room ${roomId} deleted after disconnect`);
                     delete gameRooms[roomId];
                 } else {
+                    if (room.hostId === leavingPlayer.userId) {
+                        const newHost = room.players[0];
+                        room.hostId = newHost.userId;
+                        room.hostName = newHost.userName;
+                    }
                     io.to(roomId).emit('game:update', room);
                 }
                 broadcastRoomList(io, room.clubId, room.gameType);
@@ -372,15 +386,13 @@ function startNextRound(io, roomId) {
 
     // Check if all rounds completed
     if (room.state.currentRound > room.config.totalRounds) {
-        console.log(`🏁 All rounds complete, game over`);
+        console.log(`🏁 All rounds complete (${room.state.currentRound - 1}/${room.config.totalRounds}), triggering gameOver`);
         gameOver(io, roomId);
         return;
     }
 
-    // Reset turn index if new round
-    if (room.state.currentTurnIndex >= room.players.length) {
-        room.state.currentTurnIndex = 0;
-    }
+    // Always reset turn index when a new round starts
+    room.state.currentTurnIndex = 0;
 
     startNextTurn(io, roomId);
 }
@@ -392,23 +404,26 @@ function startNextTurn(io, roomId) {
         return;
     }
 
-    // Reset turn state
-    room.state.timeRemaining = 0;
-    room.state.currentDrawer = null;
-    room.state.currentWord = '';
-
-    // Reset turn scores for all players
+    // Reset turn scores for all players at the beginning of each turn
     room.players.forEach(p => { p.turnScore = 0; });
 
     // Check if round is complete (everyone had a turn)
     if (room.state.currentTurnIndex >= room.players.length) {
-        console.log(`✅ Round ${room.state.currentRound} complete, moving to next round`);
+        console.log(`✅ Round ${room.state.currentRound} turns complete, proceeding to next round check`);
         startNextRound(io, roomId);
         return;
     }
 
     // Assign current drawer
     const drawer = room.players[room.state.currentTurnIndex];
+    if (!drawer) {
+        console.log(`❌ startNextTurn: No drawer found at index ${room.state.currentTurnIndex}`);
+        startNextRound(io, roomId);
+        return;
+    }
+
+    // Reset turn state
+    room.state.timeRemaining = 0;
     room.state.currentDrawer = drawer.userId;
     room.state.currentWord = '';
     room.state.paths = [];
@@ -421,7 +436,7 @@ function startNextTurn(io, roomId) {
     const shuffled = shuffleArray([...WORDS]);
     room.state.wordOptions = [shuffled[0], shuffled[1]];
 
-    console.log(`🎨 Turn ${room.state.currentTurnIndex + 1}/${room.players.length}: ${drawer.userName} is drawing (words: ${room.state.wordOptions.join(', ')})`);
+    console.log(`🎨 Turn ${room.state.currentTurnIndex + 1}/${room.players.length} (Round ${room.state.currentRound}): ${drawer.userName} is drawing`);
 
     io.to(roomId).emit('game:turn_start', {
         round: room.state.currentRound,
@@ -436,8 +451,7 @@ function startNextTurn(io, roomId) {
         options: room.state.wordOptions
     });
 
-    console.log(`📤 Sent word options to ${drawer.userName} (socketId: ${drawer.socketId})`);
-
+    // Increment turn index for the NEXT call
     room.state.currentTurnIndex++;
 }
 
@@ -570,10 +584,21 @@ function revealNextCharacter(word, currentHint) {
 }
 
 function broadcastRoomList(io, clubId, gameType) {
-    const activeRooms = Object.values(gameRooms).filter(r =>
-        r.clubId === clubId &&
+    // Rooms to show for this specific club
+    const clubRooms = Object.values(gameRooms).filter(r =>
+        (r.clubId === clubId || r.clubId === 'all') &&
         r.gameType === gameType &&
         r.status === 'lobby'
     );
-    io.emit('games:rooms_list', activeRooms);
+
+    if (clubId !== 'all') {
+        io.to(`club:${clubId}`).emit('games:rooms_list', { rooms: clubRooms, gameType });
+    }
+
+    // Rooms to show for 'all'
+    const allRooms = Object.values(gameRooms).filter(r =>
+        r.gameType === gameType &&
+        r.status === 'lobby'
+    );
+    io.to('club:all').emit('games:rooms_list', { rooms: allRooms, gameType });
 }
