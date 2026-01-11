@@ -405,10 +405,16 @@ exports.renderUploadPage = async (req, res) => {
  */
 exports.handleWebUpload = async (req, res) => {
     try {
-        console.log('Web Upload POST reached:', {
-            file: req.file ? req.file.originalname : 'No file',
-            user: req.user._id
-        });
+        console.log('--- Web Upload Debug ---');
+        console.log('Headers:', req.headers['content-type']);
+        console.log('Body Keys:', Object.keys(req.body || {}));
+        console.log('File Info:', req.file ? {
+            fieldname: req.file.fieldname,
+            originalname: req.file.originalname,
+            mimetype: req.file.mimetype,
+            size: req.file.size
+        } : 'No file in req.file');
+        console.log('------------------------');
 
         if (!req.file) {
             return res.status(400).json({
