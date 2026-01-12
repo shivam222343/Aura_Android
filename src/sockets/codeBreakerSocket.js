@@ -233,29 +233,60 @@ const handlers = {
             if (!room) return;
 
             const settings = DIFFICULTY_SETTINGS[difficulty];
-            const secretCode = generateRandomCode(codeType, settings.codeLength);
 
             room.state = {
                 ...room.state,
                 codeType,
                 difficulty,
-                secretCode,
-                codeLength: settings.codeLength,
-                maxAttempts: settings.maxAttempts,
-                attempts: [],
-                attemptsRemaining: settings.maxAttempts,
-                timeRemaining: settings.timeLimit,
-                solvedBy: null,
-                phase: 'guessing'
-            };
-
-            io.to(roomId).emit('codebreaker:game_started', {
-                codeType,
-                difficulty,
                 codeLength: settings.codeLength,
                 maxAttempts: settings.maxAttempts,
                 timeLimit: settings.timeLimit,
+                phase: 'picking'
+            };
+
+            // Ask code maker to set the code
+            const maker = room.players.find(p => p.userId === room.state.currentCodeMaker);
+            if (maker && maker.socketId) {
+                io.to(maker.socketId).emit('codebreaker:pick_code', {
+                    codeLength: settings.codeLength,
+                    codeType,
+                    options: CODE_TYPES[codeType].options
+                });
+            }
+        });
+
+        socket.on('codebreaker:set_code', (data) => {
+            const { roomId, secretCode } = data;
+            const room = gameRooms[roomId];
+
+            if (!room || room.state.phase !== 'picking') return;
+            if (socket.id !== room.players.find(p => p.userId === room.state.currentCodeMaker)?.socketId) return;
+
+            room.state.secretCode = secretCode;
+            room.state.attempts = [];
+            room.state.attemptsRemaining = room.state.maxAttempts;
+            room.state.timeRemaining = room.state.timeLimit;
+            room.state.solvedBy = null;
+            room.state.phase = 'guessing';
+
+            io.to(roomId).emit('codebreaker:game_started', {
+                codeType: room.state.codeType,
+                difficulty: room.state.difficulty,
+                codeLength: room.state.codeLength,
+                maxAttempts: room.state.maxAttempts,
+                timeLimit: room.state.timeLimit,
                 codeMaker: room.state.currentCodeMaker
+            });
+
+            // Re-send to maker with secret code
+            socket.emit('codebreaker:game_started', {
+                codeType: room.state.codeType,
+                difficulty: room.state.difficulty,
+                codeLength: room.state.codeLength,
+                maxAttempts: room.state.maxAttempts,
+                timeLimit: room.state.timeLimit,
+                codeMaker: room.state.currentCodeMaker,
+                secretCode: room.state.secretCode
             });
 
             startCodeBreakerTimer(roomId);
