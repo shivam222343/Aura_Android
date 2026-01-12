@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const codeBreakerHandler = require('./codeBreakerSocket');
 
 const gameRooms = {}; // In-memory storage for active game rooms
 
@@ -384,6 +385,9 @@ module.exports = (io, socket) => {
             }
         });
     });
+
+    // 🔐 Register Code Breaker handler
+    codeBreakerHandler(io, socket, gameRooms);
 };
 
 // 🔄 Game Loop Logic
