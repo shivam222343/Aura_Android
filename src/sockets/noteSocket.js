@@ -15,23 +15,25 @@ module.exports = (io, socket) => {
                     $pull: { collaborators: { userId: socket.userId } }
                 });
 
-                await Note.findByIdAndUpdate(noteId, {
+                const updatedNote = await Note.findByIdAndUpdate(noteId, {
                     $addToSet: {
                         collaborators: {
                             userId: socket.userId,
                             lastActive: new Date()
                         }
                     }
-                });
+                }, { new: true }).populate('collaborators.userId', 'displayName profilePicture');
 
-                // Notify others in the note room
-                socket.to(`note:${noteId}`).emit('note:user_joined', {
-                    userId: socket.userId,
-                    user: {
-                        _id: socket.userId,
-                        displayName: socket.userDisplayName, // Assumes these are on socket
-                        profilePicture: socket.userProfilePicture
-                    }
+                // Broadcast full list of active collaborators to the room
+                const activeCollaborators = updatedNote.collaborators.map(c => ({
+                    _id: c.userId?._id,
+                    displayName: c.userId?.displayName,
+                    profilePicture: c.userId?.profilePicture?.url || c.userId?.profilePicture
+                }));
+
+                io.to(`note:${noteId}`).emit('note:presence', {
+                    noteId,
+                    collaborators: activeCollaborators
                 });
             }
         } catch (error) {
@@ -59,21 +61,30 @@ module.exports = (io, socket) => {
         console.log(`📝 User ${socket.userId} left note room: ${noteId}`);
 
         try {
-            await Note.findByIdAndUpdate(noteId, {
+            const updatedNote = await Note.findByIdAndUpdate(noteId, {
                 $pull: { collaborators: { userId: socket.userId } }
-            });
+            }, { new: true }).populate('collaborators.userId', 'displayName profilePicture');
 
-            socket.to(`note:${noteId}`).emit('note:user_left', {
-                userId: socket.userId
-            });
+            if (updatedNote) {
+                const activeCollaborators = updatedNote.collaborators.map(c => ({
+                    _id: c.userId?._id,
+                    displayName: c.userId?.displayName,
+                    profilePicture: c.userId?.profilePicture?.url || c.userId?.profilePicture
+                }));
+
+                io.to(`note:${noteId}`).emit('note:presence', {
+                    noteId,
+                    collaborators: activeCollaborators
+                });
+            }
         } catch (error) {
             console.error('Socket note:leave error:', error);
         }
     });
 
-    // Live update of content/styles
+    // Live update of content/styles - optimized to avoid excessive broadcasts
     socket.on('note:update', async (data) => {
-        const { noteId, content, styles, title, isPublic, clubId } = data;
+        const { noteId, content, styles, title, isPublic, clubId, selection } = data;
 
         // Broadcast to everyone else in the note room
         socket.to(`note:${noteId}`).emit('note:change', {
@@ -81,7 +92,9 @@ module.exports = (io, socket) => {
             styles,
             title,
             isPublic,
-            updatedBy: socket.userId
+            selection, // Relay selection/cursor for other users
+            updatedBy: socket.userId,
+            timestamp: Date.now()
         });
 
         // Also notify the club room for list updates if note is public
@@ -90,18 +103,46 @@ module.exports = (io, socket) => {
                 type: 'update',
                 noteId,
                 title,
-                content: content ? content.substring(0, 100) : '',
+                content: content ? content.replace(/<[^>]*>?/gm, '').substring(0, 100) : '', // Strip HTML for snippet
                 updatedAt: new Date()
             });
         }
     });
 
-    // Cursor movement
+    // Cursor movement (relay only)
     socket.on('note:cursor', (data) => {
         const { noteId, cursor } = data;
         socket.to(`note:${noteId}`).emit('note:cursor_move', {
             userId: socket.userId,
             cursor
         });
+    });
+
+    // Handle sudden disconnect
+    socket.on('disconnect', async () => {
+        // Find all notes where this user was a collaborator and clean up
+        try {
+            const notes = await Note.find({ 'collaborators.userId': socket.userId });
+            for (const note of notes) {
+                const updatedNote = await Note.findByIdAndUpdate(note._id, {
+                    $pull: { collaborators: { userId: socket.userId } }
+                }, { new: true }).populate('collaborators.userId', 'displayName profilePicture');
+
+                if (updatedNote) {
+                    const activeCollaborators = updatedNote.collaborators.map(c => ({
+                        _id: c.userId?._id,
+                        displayName: c.userId?.displayName,
+                        profilePicture: c.userId?.profilePicture?.url || c.userId?.profilePicture
+                    }));
+
+                    io.to(`note:${note._id}`).emit('note:presence', {
+                        noteId: note._id,
+                        collaborators: activeCollaborators
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('Socket disconnect cleanup error:', err);
+        }
     });
 };
