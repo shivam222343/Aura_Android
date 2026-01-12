@@ -302,7 +302,3 @@ function endCodeBreakerGame(io, roomId) {
         delete gameRooms[roomId];
     }, 60000);
 }
-
-// Export for game room management
-module.exports.gameRooms = gameRooms;
-module.exports.startNextCodeBreakerTurn = startNextCodeBreakerTurn;
