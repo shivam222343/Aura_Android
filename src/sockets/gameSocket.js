@@ -4,7 +4,31 @@ const memeMatchHandler = require('./memeMatchSocket');
 
 const gameRooms = {}; // In-memory storage for active game rooms
 
+function broadcastRoomList(io, clubId, gameType) {
+    // Rooms to show for this specific club
+    const clubRooms = Object.values(gameRooms).filter(r =>
+        (r.clubId === clubId || r.clubId === 'all') &&
+        r.gameType === gameType &&
+        r.status === 'lobby'
+    );
+
+    if (clubId !== 'all') {
+        io.to(`club:${clubId}`).emit('games:rooms_list', { rooms: clubRooms, gameType, clubId });
+    }
+
+    // Rooms to show for 'all'
+    const allRooms = Object.values(gameRooms).filter(r =>
+        r.gameType === gameType &&
+        r.status === 'lobby'
+    );
+    io.to('club:all').emit('games:rooms_list', { rooms: allRooms, gameType, clubId: 'all' });
+}
+
 module.exports = (io, socket) => {
+    // Inject dependencies into specialized handlers
+    codeBreakerHandler.init && codeBreakerHandler.init(io, gameRooms, broadcastRoomList);
+    memeMatchHandler.init && memeMatchHandler.init(io, gameRooms, broadcastRoomList);
+
     // 🎲 Get Active Rooms for a Club
     socket.on('games:get_rooms', (data) => {
         const { clubId, gameType } = data;
@@ -657,22 +681,5 @@ function revealNextCharacter(word, currentHint) {
     return hintArray.join(' ');
 }
 
-function broadcastRoomList(io, clubId, gameType) {
-    // Rooms to show for this specific club
-    const clubRooms = Object.values(gameRooms).filter(r =>
-        (r.clubId === clubId || r.clubId === 'all') &&
-        r.gameType === gameType &&
-        r.status === 'lobby'
-    );
-
-    if (clubId !== 'all') {
-        io.to(`club:${clubId}`).emit('games:rooms_list', { rooms: clubRooms, gameType });
-    }
-
-    // Rooms to show for 'all'
-    const allRooms = Object.values(gameRooms).filter(r =>
-        r.gameType === gameType &&
-        r.status === 'lobby'
-    );
-    io.to('club:all').emit('games:rooms_list', { rooms: allRooms, gameType });
-}
+module.exports.gameRooms = gameRooms;
+module.exports.broadcastRoomList = broadcastRoomList;

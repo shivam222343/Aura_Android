@@ -73,7 +73,16 @@ function calculateScore(attempts, timeRemaining, difficulty) {
 }
 
 // Exported functions
+let _io;
+let _gameRooms;
+let _broadcastRoomList;
+
 const handlers = {
+    init: (io, gameRooms, broadcastRoomList) => {
+        _io = io;
+        _gameRooms = gameRooms;
+        _broadcastRoomList = broadcastRoomList;
+    },
     startCodeBreakerGame: (io, roomId, gameRooms) => {
         const room = gameRooms[roomId];
         if (!room) return;
@@ -374,6 +383,11 @@ const handlers = {
                     io.to(roomId).emit('codebreaker:player_left', {
                         players: room.players
                     });
+                }
+
+                // Broadcast updated room list
+                if (_broadcastRoomList) {
+                    _broadcastRoomList(io, room.clubId, room.gameType);
                 }
             }
         });
