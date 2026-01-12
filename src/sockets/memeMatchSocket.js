@@ -1,4 +1,5 @@
 // Meme Match Game Socket Handler
+
 // Situation database
 const SITUATIONS = [
     // Work/Office (10)
@@ -62,8 +63,6 @@ const SITUATIONS = [
     "When you realize everyone can see your screen"
 ];
 
-const CATEGORIES = ['work', 'school', 'relationships', 'technology', 'random'];
-
 function getRandomSituation() {
     return SITUATIONS[Math.floor(Math.random() * SITUATIONS.length)];
 }
@@ -77,29 +76,39 @@ function shuffleArray(array) {
     return arr;
 }
 
-module.exports = (io, socket, gameRooms) => {
-    // Start Meme Match round
-    socket.on('memematch:start_round', (data) => {
-        const { roomId } = data;
+// Exported functions
+const handlers = {
+    startMemeMatchGame: (io, roomId, gameRooms) => {
         const room = gameRooms[roomId];
+        if (!room) return;
 
-        if (!room || room.gameType !== 'meme_match') return;
-
-        // Generate situation
-        const situation = getRandomSituation();
-
+        // Initialize game state
         room.state = {
-            ...room.state,
-            currentRound: (room.state.currentRound || 0) + 1,
-            situation,
+            currentRound: 0,
+            players: room.players.map(p => ({ ...p, score: 0, turnScore: 0 })),
             submissions: [],
             votes: {},
-            phase: 'submitting',
-            timeRemaining: 60,
-            votingStarted: false
+            phase: 'waiting'
         };
 
-        // Broadcast situation to all players
+        // Start first round
+        handlers.startNextMemeMatchRound(io, roomId, gameRooms);
+    },
+
+    startNextMemeMatchRound: (io, roomId, gameRooms) => {
+        const room = gameRooms[roomId];
+        if (!room) return;
+
+        const situation = getRandomSituation();
+
+        room.state.currentRound = (room.state.currentRound || 0) + 1;
+        room.state.situation = situation;
+        room.state.submissions = [];
+        room.state.votes = {};
+        room.state.phase = 'submitting';
+        room.state.timeRemaining = 60;
+        room.state.votingStarted = false;
+
         io.to(roomId).emit('memematch:situation', {
             round: room.state.currentRound,
             totalRounds: room.config.totalRounds,
@@ -107,234 +116,235 @@ module.exports = (io, socket, gameRooms) => {
             timeLimit: 60
         });
 
-        // Start submission timer
-        startMemeMatchTimer(io, roomId, 'submitting');
-    });
+        // We need access to the internal startTimer function. 
+        // Since we are decoupling, we might need to expose it or duplicate the timer logic.
+        // For simplicity in this architecture, we will rely on a new timer starter or move the timer logic here.
+        // However, the timer uses setInterval which needs to be stored on room.state.
 
-    // Submit caption
-    socket.on('memematch:submit', (data) => {
-        const { roomId, userId, userName, caption } = data;
+        // Let's define the timer logic helper inside handlers to be used by both
+        handlers.startMemeMatchTimer(io, roomId, gameRooms, 'submitting');
+    },
+
+    startMemeMatchTimer: (io, roomId, gameRooms, phase) => {
         const room = gameRooms[roomId];
+        if (!room) return;
 
-        if (!room || room.state.phase !== 'submitting') return;
-
-        // Check if user already submitted
-        const existingSubmission = room.state.submissions.find(s => s.userId === userId);
-        if (existingSubmission) {
-            existingSubmission.caption = caption;
-        } else {
-            room.state.submissions.push({
-                submissionId: `sub_${Date.now()}_${userId}`,
-                userId,
-                userName,
-                caption,
-                votes: []
-            });
+        if (room.state.timer) {
+            clearInterval(room.state.timer);
         }
 
-        // Notify room of submission count
-        io.to(roomId).emit('memematch:submission_count', {
-            submitted: room.state.submissions.length,
-            total: room.players.length
+        const timeLimit = phase === 'submitting' ? 60 : 30;
+        room.state.timeRemaining = timeLimit;
+
+        room.state.timer = setInterval(() => {
+            const currentRoom = gameRooms[roomId];
+            if (!currentRoom) {
+                clearInterval(room.state.timer);
+                return;
+            }
+
+            currentRoom.state.timeRemaining--;
+            io.to(roomId).emit('memematch:time_update', currentRoom.state.timeRemaining);
+
+            if (currentRoom.state.timeRemaining <= 0) {
+                clearInterval(currentRoom.state.timer);
+
+                if (phase === 'submitting') {
+                    handlers.startVotingPhase(io, roomId, gameRooms);
+                } else if (phase === 'voting') {
+                    handlers.endMemeMatchRound(io, roomId, gameRooms);
+                }
+            }
+        }, 1000);
+    },
+
+    startVotingPhase: (io, roomId, gameRooms) => {
+        const room = gameRooms[roomId];
+        if (!room) return;
+
+        room.state.phase = 'voting';
+        room.state.votingStarted = true;
+
+        const shuffledSubmissions = shuffleArray(room.state.submissions).map(s => ({
+            submissionId: s.submissionId,
+            caption: s.caption
+        }));
+
+        io.to(roomId).emit('memematch:voting_start', {
+            submissions: shuffledSubmissions,
+            timeLimit: 30
         });
 
-        // If all players submitted, start voting early
-        if (room.state.submissions.length === room.players.length) {
-            clearInterval(room.state.timer);
-            startVotingPhase(io, roomId);
-        }
-    });
+        handlers.startMemeMatchTimer(io, roomId, gameRooms, 'voting');
+    },
 
-    // Submit vote
-    socket.on('memematch:vote', (data) => {
-        const { roomId, userId, submissionId } = data;
+    endMemeMatchRound: (io, roomId, gameRooms) => {
         const room = gameRooms[roomId];
+        if (!room) return;
 
-        if (!room || room.state.phase !== 'voting') return;
-
-        // Don't allow voting for own submission
-        const submission = room.state.submissions.find(s => s.submissionId === submissionId);
-        if (submission && submission.userId === userId) return;
-
-        // Record vote
-        room.state.votes[userId] = submissionId;
-
-        // Add vote to submission
-        const targetSubmission = room.state.submissions.find(s => s.submissionId === submissionId);
-        if (targetSubmission && !targetSubmission.votes.includes(userId)) {
-            targetSubmission.votes.push(userId);
+        if (room.state.timer) {
+            clearInterval(room.state.timer);
+            room.state.timer = null;
         }
 
-        // Notify vote count
-        io.to(roomId).emit('memematch:vote_count', {
-            voted: Object.keys(room.state.votes).length,
-            total: room.players.length
+        room.state.phase = 'results';
+
+        room.state.submissions.forEach(submission => {
+            const player = room.players.find(p => p.userId === submission.userId);
+            if (player) {
+                const voteCount = (submission.votes || []).length;
+                const points = voteCount * 100;
+
+                const maxVotes = Math.max(...room.state.submissions.map(s => (s.votes || []).length));
+                if (voteCount === maxVotes && maxVotes > 0) {
+                    player.score += points + 500;
+                    player.turnScore = points + 500;
+                } else {
+                    player.score += points;
+                    player.turnScore = points;
+                }
+                player.score += 50;
+            }
         });
 
-        // If all players voted, end voting early
-        if (Object.keys(room.state.votes).length === room.players.length) {
-            clearInterval(room.state.timer);
-            endMemeMatchRound(io, roomId);
-        }
-    });
+        const sortedSubmissions = [...room.state.submissions].sort((a, b) =>
+            (b.votes || []).length - (a.votes || []).length
+        );
 
-    // Leave room
-    socket.on('memematch:leave', (roomId) => {
+        io.to(roomId).emit('memematch:round_end', {
+            submissions: sortedSubmissions.map(s => ({
+                ...s,
+                voteCount: (s.votes || []).length
+            })),
+            scores: room.players.map(p => ({
+                userId: p.userId,
+                userName: p.userName,
+                score: p.score,
+                turnScore: p.turnScore || 0
+            })).sort((a, b) => b.score - a.score)
+        });
+
+        setTimeout(() => {
+            const stillExists = gameRooms[roomId];
+            if (stillExists) {
+                if (stillExists.state.currentRound >= stillExists.config.totalRounds) {
+                    handlers.endMemeMatchGame(io, roomId, gameRooms);
+                } else {
+                    stillExists.players.forEach(p => { p.turnScore = 0; });
+                    handlers.startNextMemeMatchRound(io, roomId, gameRooms);
+                }
+            }
+        }, 8000);
+    },
+
+    endMemeMatchGame: (io, roomId, gameRooms) => {
         const room = gameRooms[roomId];
-        if (room) {
-            room.players = room.players.filter(p => p.socketId !== socket.id);
-            socket.leave(roomId);
+        if (!room) return;
 
-            if (room.players.length === 0) {
-                if (room.state.timer) clearInterval(room.state.timer);
-                delete gameRooms[roomId];
-                console.log(`Empty Meme Match room ${roomId} deleted`);
+        room.status = 'finished';
+        const sortedPlayers = [...room.players].sort((a, b) => b.score - a.score);
+
+        io.to(roomId).emit('memematch:game_over', {
+            winner: sortedPlayers[0],
+            leaderboard: sortedPlayers
+        });
+
+        setTimeout(() => {
+            delete gameRooms[roomId];
+        }, 60000);
+    },
+
+    init: (io, socket, gameRooms) => {
+        // Listeners
+        socket.on('memematch:join', (data) => {
+            const { roomId } = data;
+            const room = gameRooms[roomId];
+            if (room) {
+                socket.join(roomId);
+                socket.emit('game:update', room);
+                console.log(`Player joined Meme Match room: ${roomId}`);
+            }
+        });
+
+        // Keep start_round listener for legacy or manual triggers, but it uses the handler
+        socket.on('memematch:start_round', (data) => {
+            const { roomId } = data;
+            handlers.startNextMemeMatchRound(io, roomId, gameRooms);
+        });
+
+        socket.on('memematch:submit', (data) => {
+            const { roomId, userId, userName, caption } = data;
+            const room = gameRooms[roomId];
+
+            if (!room || room.state.phase !== 'submitting') return;
+
+            const existingSubmission = room.state.submissions.find(s => s.userId === userId);
+            if (existingSubmission) {
+                existingSubmission.caption = caption;
             } else {
-                io.to(roomId).emit('memematch:player_left', {
-                    players: room.players
+                room.state.submissions.push({
+                    submissionId: `sub_${Date.now()}_${userId}`,
+                    userId,
+                    userName,
+                    caption,
+                    votes: []
                 });
             }
-        }
-    });
+
+            io.to(roomId).emit('memematch:submission_count', {
+                submitted: room.state.submissions.length,
+                total: room.players.length
+            });
+
+            if (room.state.submissions.length === room.players.length) {
+                clearInterval(room.state.timer);
+                handlers.startVotingPhase(io, roomId, gameRooms);
+            }
+        });
+
+        socket.on('memematch:vote', (data) => {
+            const { roomId, userId, submissionId } = data;
+            const room = gameRooms[roomId];
+
+            if (!room || room.state.phase !== 'voting') return;
+
+            const submission = room.state.submissions.find(s => s.submissionId === submissionId);
+            if (submission && submission.userId === userId) return;
+
+            room.state.votes[userId] = submissionId;
+
+            const targetSubmission = room.state.submissions.find(s => s.submissionId === submissionId);
+            if (targetSubmission && !targetSubmission.votes.includes(userId)) {
+                targetSubmission.votes.push(userId);
+            }
+
+            io.to(roomId).emit('memematch:vote_count', {
+                voted: Object.keys(room.state.votes).length,
+                total: room.players.length
+            });
+
+            if (Object.keys(room.state.votes).length === room.players.length) {
+                clearInterval(room.state.timer);
+                handlers.endMemeMatchRound(io, roomId, gameRooms);
+            }
+        });
+
+        socket.on('memematch:leave', (roomId) => {
+            const room = gameRooms[roomId];
+            if (room) {
+                room.players = room.players.filter(p => p.socketId !== socket.id);
+                socket.leave(roomId);
+                if (room.players.length === 0) {
+                    if (room.state.timer) clearInterval(room.state.timer);
+                    delete gameRooms[roomId];
+                } else {
+                    io.to(roomId).emit('memematch:player_left', {
+                        players: room.players
+                    });
+                }
+            }
+        });
+    }
 };
 
-function startMemeMatchTimer(io, roomId, phase) {
-    const room = gameRooms[roomId];
-    if (!room) return;
-
-    if (room.state.timer) {
-        clearInterval(room.state.timer);
-    }
-
-    const timeLimit = phase === 'submitting' ? 60 : 30;
-    room.state.timeRemaining = timeLimit;
-
-    room.state.timer = setInterval(() => {
-        const currentRoom = gameRooms[roomId];
-        if (!currentRoom) {
-            clearInterval(room.state.timer);
-            return;
-        }
-
-        currentRoom.state.timeRemaining--;
-        io.to(roomId).emit('memematch:time_update', currentRoom.state.timeRemaining);
-
-        if (currentRoom.state.timeRemaining <= 0) {
-            clearInterval(currentRoom.state.timer);
-
-            if (phase === 'submitting') {
-                startVotingPhase(io, roomId);
-            } else if (phase === 'voting') {
-                endMemeMatchRound(io, roomId);
-            }
-        }
-    }, 1000);
-}
-
-function startVotingPhase(io, roomId) {
-    const room = gameRooms[roomId];
-    if (!room) return;
-
-    room.state.phase = 'voting';
-    room.state.votingStarted = true;
-
-    // Shuffle submissions for anonymous display
-    const shuffledSubmissions = shuffleArray(room.state.submissions).map(s => ({
-        submissionId: s.submissionId,
-        caption: s.caption
-        // userId and userName hidden during voting
-    }));
-
-    io.to(roomId).emit('memematch:voting_start', {
-        submissions: shuffledSubmissions,
-        timeLimit: 30
-    });
-
-    startMemeMatchTimer(io, roomId, 'voting');
-}
-
-function endMemeMatchRound(io, roomId) {
-    const room = gameRooms[roomId];
-    if (!room) return;
-
-    if (room.state.timer) {
-        clearInterval(room.state.timer);
-        room.state.timer = null;
-    }
-
-    room.state.phase = 'results';
-
-    // Calculate scores
-    room.state.submissions.forEach(submission => {
-        const player = room.players.find(p => p.userId === submission.userId);
-        if (player) {
-            const voteCount = submission.votes.length;
-            const points = voteCount * 100;
-
-            // Bonus for most votes
-            const maxVotes = Math.max(...room.state.submissions.map(s => s.votes.length));
-            if (voteCount === maxVotes && maxVotes > 0) {
-                player.score += points + 500;
-                player.turnScore = points + 500;
-            } else {
-                player.score += points;
-                player.turnScore = points;
-            }
-
-            // Participation points
-            player.score += 50;
-        }
-    });
-
-    // Sort submissions by votes
-    const sortedSubmissions = [...room.state.submissions].sort((a, b) =>
-        b.votes.length - a.votes.length
-    );
-
-    io.to(roomId).emit('memematch:round_end', {
-        submissions: sortedSubmissions.map(s => ({
-            ...s,
-            voteCount: s.votes.length
-        })),
-        scores: room.players.map(p => ({
-            userId: p.userId,
-            userName: p.userName,
-            score: p.score,
-            turnScore: p.turnScore || 0
-        })).sort((a, b) => b.score - a.score)
-    });
-
-    // Check if game is over
-    setTimeout(() => {
-        const stillExists = gameRooms[roomId];
-        if (stillExists) {
-            if (stillExists.state.currentRound >= stillExists.config.totalRounds) {
-                endMemeMatchGame(io, roomId);
-            } else {
-                // Reset for next round
-                stillExists.players.forEach(p => { p.turnScore = 0; });
-                io.to(roomId).emit('memematch:next_round', {
-                    round: stillExists.state.currentRound + 1,
-                    totalRounds: stillExists.config.totalRounds
-                });
-            }
-        }
-    }, 8000);
-}
-
-function endMemeMatchGame(io, roomId) {
-    const room = gameRooms[roomId];
-    if (!room) return;
-
-    room.status = 'finished';
-    const sortedPlayers = [...room.players].sort((a, b) => b.score - a.score);
-
-    io.to(roomId).emit('memematch:game_over', {
-        winner: sortedPlayers[0],
-        leaderboard: sortedPlayers
-    });
-
-    setTimeout(() => {
-        delete gameRooms[roomId];
-    }, 60000);
-}
+module.exports = handlers;

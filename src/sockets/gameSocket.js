@@ -190,8 +190,14 @@ module.exports = (io, socket) => {
             // Broadcast updated state immediately
             io.to(roomId).emit('game:update', room);
 
-            // Start the first round
-            startNextRound(io, roomId);
+            // Start the first round based on game type
+            if (room.gameType === 'code_breaker') {
+                codeBreakerHandler.startCodeBreakerGame(io, roomId, gameRooms);
+            } else if (room.gameType === 'meme_match') {
+                memeMatchHandler.startMemeMatchGame(io, roomId, gameRooms);
+            } else {
+                startNextRound(io, roomId);
+            }
 
             // Remove from lobby list
             broadcastRoomList(io, room.clubId, room.gameType);
@@ -388,10 +394,10 @@ module.exports = (io, socket) => {
     });
 
     // 🔐 Register Code Breaker handler
-    codeBreakerHandler(io, socket, gameRooms);
+    codeBreakerHandler.init(io, socket, gameRooms);
 
     // 😂 Register Meme Match handler
-    memeMatchHandler(io, socket, gameRooms);
+    memeMatchHandler.init(io, socket, gameRooms);
 };
 
 // 🔄 Game Loop Logic
