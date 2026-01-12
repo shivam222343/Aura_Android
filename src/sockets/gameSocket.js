@@ -11,7 +11,8 @@ function broadcastRoomList(io, clubId, gameType) {
     const clubRooms = Object.values(gameRooms).filter(r => {
         const clubMatch = (r.clubId === clubId || r.clubId === 'all');
         const typeMatch = r.gameType === gameType;
-        const statusMatch = r.status === 'lobby';
+        // Allow rooms in lobby OR rooms that have started (user request)
+        const statusMatch = r.status === 'lobby' || r.status === 'playing';
         if (!clubMatch || !typeMatch || !statusMatch) {
             // console.log(`   ❌ Room ${r.roomId} excluded: clubMatch=${clubMatch}, typeMatch=${typeMatch}, statusMatch=${statusMatch}`);
         }
@@ -30,7 +31,7 @@ function broadcastRoomList(io, clubId, gameType) {
     // Rooms to show for 'all'
     const allRooms = Object.values(gameRooms).filter(r =>
         r.gameType === gameType &&
-        r.status === 'lobby'
+        (r.status === 'lobby' || r.status === 'playing')
     );
 
     console.log(`   -> Found ${allRooms.length} rooms for 'all'`);
@@ -47,7 +48,8 @@ module.exports = (io, socket) => {
         const { clubId, gameType } = data;
         const activeRooms = Object.values(gameRooms).filter(r => {
             const clubMatch = clubId === 'all' || r.clubId === clubId || r.clubId === 'all';
-            return clubMatch && r.gameType === gameType && r.status === 'lobby';
+            const statusMatch = r.status === 'lobby' || r.status === 'playing';
+            return clubMatch && r.gameType === gameType && statusMatch;
         });
         socket.emit('games:rooms_list', { rooms: activeRooms, gameType, clubId });
     });
