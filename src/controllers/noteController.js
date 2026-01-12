@@ -58,14 +58,32 @@ exports.createNote = async (req, res) => {
 exports.getNotes = async (req, res) => {
     try {
         const { clubId } = req.query;
+        const joinedClubIds = (req.user.clubsJoined || []).map(c => c.clubId.toString());
 
-        // Find my personal notes OR public notes in this club
-        const query = {
-            $or: [
-                { userId: req.user._id },
-                { clubId, isPublic: true }
-            ]
-        };
+        let query;
+
+        if (clubId && clubId !== 'all') {
+            // Specific club view
+            const isMember = joinedClubIds.includes(clubId.toString());
+
+            query = {
+                $or: [
+                    { userId: req.user._id, clubId: clubId }, // Personal notes in this club context
+                    isMember ? { clubId, isPublic: true } : { _id: null } // Public notes only if member
+                ]
+            };
+
+            // Also allow personal notes with NO clubId if user is in "all" but filtered by UI?
+            // Actually, if UI asks for clubId, we only show notes belonging to that club context or public notes of that club.
+        } else {
+            // Global view
+            query = {
+                $or: [
+                    { userId: req.user._id }, // All personal notes
+                    { clubId: { $in: joinedClubIds }, isPublic: true } // Public notes from ALL joined clubs
+                ]
+            };
+        }
 
         const notes = await Note.find(query)
             .populate('userId', 'displayName profilePicture')
@@ -103,6 +121,16 @@ exports.getNoteById = async (req, res) => {
         // Check permission
         if (!note.isPublic && note.userId.toString() !== req.user._id.toString()) {
             return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
+        if (note.isPublic && note.clubId) {
+            const joinedClubIds = (req.user.clubsJoined || []).map(c => c.clubId.toString());
+            const isMember = joinedClubIds.includes(note.clubId.toString());
+            const isOwner = note.userId.toString() === req.user._id.toString();
+
+            if (!isMember && !isOwner) {
+                return res.status(403).json({ success: false, message: 'You must be a member of this club to view this public note' });
+            }
         }
 
         res.status(200).json({
