@@ -2,9 +2,9 @@
 
 // Code generation utilities
 const CODE_TYPES = {
-    numbers: { options: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], label: 'Numbers' },
+    numbers: { options: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], label: 'Numbers' },
     colors: {
-        options: ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan'],
+        options: ['🔴', '🔵', '🟢', '🟡', '🟣', '🟠', '🩷', '🩵'],
         label: 'Colors'
     },
     symbols: {
@@ -29,32 +29,37 @@ function generateRandomCode(codeType, length) {
 }
 
 function calculateClue(secretCode, guess) {
-    const secret = [...secretCode];
-    const guessArray = [...guess];
+    // Ensure both are arrays of strings for consistent comparison
+    const secret = secretCode.map(s => String(s));
+    const guessArray = guess.map(g => String(g));
+
+    const workingSecret = [...secret];
+    const workingGuess = [...guessArray];
+
     let correct = 0;
     let wrongPosition = 0;
 
     // First pass: find correct positions
-    for (let i = 0; i < secret.length; i++) {
-        if (secret[i] === guessArray[i]) {
+    for (let i = 0; i < workingSecret.length; i++) {
+        if (workingSecret[i] === workingGuess[i]) {
             correct++;
-            secret[i] = null;
-            guessArray[i] = null;
+            workingSecret[i] = null;
+            workingGuess[i] = null;
         }
     }
 
     // Second pass: find wrong positions
-    for (let i = 0; i < guessArray.length; i++) {
-        if (guessArray[i] !== null) {
-            const index = secret.indexOf(guessArray[i]);
+    for (let i = 0; i < workingGuess.length; i++) {
+        if (workingGuess[i] !== null) {
+            const index = workingSecret.indexOf(workingGuess[i]);
             if (index !== -1) {
                 wrongPosition++;
-                secret[index] = null;
+                workingSecret[index] = null;
             }
         }
     }
 
-    const wrong = secretCode.length - correct - wrongPosition;
+    const wrong = secret.length - correct - wrongPosition;
     return { correct, wrongPosition, wrong };
 }
 
@@ -218,11 +223,32 @@ const handlers = {
         socket.on('codebreaker:join', (data) => {
             const { roomId } = data;
             const room = gameRooms[roomId];
-
             if (room) {
                 socket.join(roomId);
                 socket.emit('game:update', room);
-                console.log(`Player joined Code Breaker room: ${roomId}`);
+
+                // If game already started, send current state to the joining player
+                if (room.state && (room.state.phase === 'picking' || room.state.phase === 'guessing')) {
+                    socket.emit('codebreaker:game_started', {
+                        codeType: room.state.codeType,
+                        difficulty: room.state.difficulty,
+                        codeLength: room.state.codeLength,
+                        maxAttempts: room.state.maxAttempts,
+                        timeLimit: room.state.timeLimit,
+                        codeMaker: room.state.currentCodeMaker,
+                        phase: room.state.phase // Pass phase so UI knows if picking/guessing
+                    });
+
+                    // Also catch up on attempts
+                    if (room.state.attempts && room.state.attempts.length > 0) {
+                        room.state.attempts.forEach(attempt => {
+                            socket.emit('codebreaker:attempt_made', {
+                                attempt,
+                                attemptsRemaining: room.state.attemptsRemaining
+                            });
+                        });
+                    }
+                }
             }
         });
 
@@ -268,6 +294,7 @@ const handlers = {
             room.state.timeRemaining = room.state.timeLimit;
             room.state.solvedBy = null;
             room.state.phase = 'guessing';
+            room.status = 'playing';
 
             io.to(roomId).emit('codebreaker:game_started', {
                 codeType: room.state.codeType,

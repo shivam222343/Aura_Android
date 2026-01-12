@@ -182,7 +182,9 @@ module.exports = (io, socket) => {
 
             console.log(`✅ Starting game in room ${roomId} with ${room.players.length} players`);
 
-            room.status = 'playing';
+            if (room.gameType !== 'code_breaker') {
+                room.status = 'playing';
+            }
 
             // Shuffle players for random turn order
             room.players = shuffleArray(room.players);
