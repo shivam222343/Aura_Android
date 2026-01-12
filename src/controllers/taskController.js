@@ -211,6 +211,8 @@ exports.deleteTask = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
+        const clubId = task.clubId;
+        const taskId = task._id;
         await task.deleteOne();
 
         // Invalidate caches (Best effort, usually for the club)
@@ -220,6 +222,12 @@ exports.deleteTask = async (req, res) => {
         await delCache(`user:dashboard:${req.user._id}`);
 
         res.status(200).json({ success: true, message: 'Task removed' });
+
+        // Emit socket event for real-time deletion
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${clubId}`).emit('task_deleted', { taskId: taskId.toString() });
+        }
     } catch (error) {
         res.status(500).json({ success: false, message: 'Server error' });
     }

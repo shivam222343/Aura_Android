@@ -67,7 +67,12 @@ const sendPushNotification = async (pushToken, { title, body, data = {} }) => {
             },
             data: {
                 ...Object.keys(data).reduce((acc, key) => {
-                    acc[key] = String(data[key]);
+                    const value = data[key];
+                    if (value && (typeof value === 'object' || Array.isArray(value))) {
+                        acc[key] = JSON.stringify(value);
+                    } else {
+                        acc[key] = String(value);
+                    }
                     return acc;
                 }, {}),
                 title: String(title),
