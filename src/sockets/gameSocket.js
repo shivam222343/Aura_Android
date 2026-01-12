@@ -5,37 +5,24 @@ const memeMatchHandler = require('./memeMatchSocket');
 const gameRooms = {}; // In-memory storage for active game rooms
 
 function broadcastRoomList(io, clubId, gameType) {
-    console.log(`📡 Broadcasting Room List: club=${clubId}, type=${gameType}`);
+    console.log(`📡 Broadcasting Global Room List for type=${gameType}`);
 
-    // Rooms to show for this specific club
-    const clubRooms = Object.values(gameRooms).filter(r => {
-        const clubMatch = (r.clubId === clubId || r.clubId === 'all');
-        const typeMatch = r.gameType === gameType;
-        // Allow rooms in lobby OR rooms that have started (user request)
-        const statusMatch = r.status === 'lobby' || r.status === 'playing';
-        if (!clubMatch || !typeMatch || !statusMatch) {
-            // console.log(`   ❌ Room ${r.roomId} excluded: clubMatch=${clubMatch}, typeMatch=${typeMatch}, statusMatch=${statusMatch}`);
-        }
-        return clubMatch && typeMatch && statusMatch;
-    });
-
-    console.log(`   -> Found ${clubRooms.length} rooms for club ${clubId} among ${Object.keys(gameRooms).length} total rooms`);
-    if (clubRooms.length === 0 && Object.keys(gameRooms).length > 0) {
-        console.log('   -> Current Rooms:', JSON.stringify(Object.values(gameRooms).map(r => ({ id: r.roomId, club: r.clubId, status: r.status, type: r.gameType }))));
-    }
-
-    if (clubId !== 'all') {
-        io.to(`club:${clubId}`).emit('games:rooms_list', { rooms: clubRooms, gameType, clubId });
-    }
-
-    // Rooms to show for 'all'
+    // Find all active rooms for this gameType, ignoring club boundaries (User request: visible to all)
     const allRooms = Object.values(gameRooms).filter(r =>
         r.gameType === gameType &&
         (r.status === 'lobby' || r.status === 'playing')
     );
 
-    console.log(`   -> Found ${allRooms.length} rooms for 'all'`);
+    console.log(`   -> Found ${allRooms.length} global rooms for type ${gameType}`);
+
+    // Broadcast to the 'all' room which contains everyone
     io.to('club:all').emit('games:rooms_list', { rooms: allRooms, gameType, clubId: 'all' });
+
+    // Also broadcast to the specific club room if current user is in one, 
+    // ensuring they get the update even if they haven't joined 'all' yet
+    if (clubId && clubId !== 'all') {
+        io.to(`club:${clubId}`).emit('games:rooms_list', { rooms: allRooms, gameType, clubId: 'all' });
+    }
 }
 
 module.exports = (io, socket) => {
@@ -45,13 +32,13 @@ module.exports = (io, socket) => {
 
     // 🎲 Get Active Rooms for a Club
     socket.on('games:get_rooms', (data) => {
-        const { clubId, gameType } = data;
+        const { gameType } = data;
         const activeRooms = Object.values(gameRooms).filter(r => {
-            const clubMatch = clubId === 'all' || r.clubId === clubId || r.clubId === 'all';
             const statusMatch = r.status === 'lobby' || r.status === 'playing';
-            return clubMatch && r.gameType === gameType && statusMatch;
+            return r.gameType === gameType && statusMatch;
         });
-        socket.emit('games:rooms_list', { rooms: activeRooms, gameType, clubId });
+        console.log(`📡 Sending global room list for ${gameType} to requesting user (${activeRooms.length} rooms)`);
+        socket.emit('games:rooms_list', { rooms: activeRooms, gameType, clubId: 'all' });
     });
 
     // 🚀 Host a Game
