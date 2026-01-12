@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const codeBreakerHandler = require('./codeBreakerSocket');
+const memeMatchHandler = require('./memeMatchSocket');
 
 const gameRooms = {}; // In-memory storage for active game rooms
 
@@ -388,6 +389,9 @@ module.exports = (io, socket) => {
 
     // 🔐 Register Code Breaker handler
     codeBreakerHandler(io, socket, gameRooms);
+
+    // 😂 Register Meme Match handler
+    memeMatchHandler(io, socket, gameRooms);
 };
 
 // 🔄 Game Loop Logic
