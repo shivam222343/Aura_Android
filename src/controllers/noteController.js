@@ -58,7 +58,10 @@ exports.createNote = async (req, res) => {
 exports.getNotes = async (req, res) => {
     try {
         const { clubId } = req.query;
-        const joinedClubIds = (req.user.clubsJoined || []).map(c => c.clubId.toString());
+        const joinedClubIds = (req.user.clubsJoined || [])
+            .filter(c => c && c.clubId)
+            .map(c => c.clubId.toString());
+
 
         let query;
 
