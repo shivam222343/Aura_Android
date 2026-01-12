@@ -387,7 +387,50 @@ module.exports = (io, socket) => {
 };
 
 // 🔄 Game Loop Logic
-const WORDS = ['Rocket', 'Mavericks', 'Laptop', 'Elephant', 'Guitar', 'Sunset', 'Mountain', 'Pizza', 'Robot', 'Bicycle', 'Dragon', 'Camera', 'Diamond', 'Butterfly', 'Castle', 'Rainbow', 'Thunder', 'Ocean', 'Forest', 'Wizard'];
+const WORDS = [
+    // Animals (25)
+    'Elephant', 'Dragon', 'Butterfly', 'Penguin', 'Giraffe', 'Octopus', 'Kangaroo', 'Dolphin', 'Tiger', 'Peacock',
+    'Crocodile', 'Flamingo', 'Koala', 'Panda', 'Zebra', 'Cheetah', 'Gorilla', 'Owl', 'Parrot', 'Seahorse',
+    'Jellyfish', 'Chameleon', 'Hedgehog', 'Platypus', 'Sloth',
+
+    // Objects & Technology (30)
+    'Laptop', 'Guitar', 'Camera', 'Diamond', 'Rocket', 'Robot', 'Bicycle', 'Telescope', 'Microphone', 'Headphones',
+    'Keyboard', 'Smartphone', 'Drone', 'Compass', 'Hourglass', 'Umbrella', 'Backpack', 'Suitcase', 'Hammer', 'Scissors',
+    'Paintbrush', 'Flashlight', 'Binoculars', 'Calculator', 'Trophy', 'Crown', 'Sword', 'Shield', 'Anchor', 'Telescope',
+
+    // Nature & Weather (25)
+    'Sunset', 'Mountain', 'Rainbow', 'Thunder', 'Ocean', 'Forest', 'Volcano', 'Waterfall', 'Lightning', 'Tornado',
+    'Snowflake', 'Avalanche', 'Eclipse', 'Aurora', 'Comet', 'Meteor', 'Island', 'Canyon', 'Desert', 'Glacier',
+    'Meadow', 'Jungle', 'Reef', 'Cave', 'Cliff',
+
+    // Food & Drinks (25)
+    'Pizza', 'Hamburger', 'Sushi', 'Taco', 'Donut', 'Cupcake', 'Sandwich', 'Pancake', 'Waffle', 'Burrito',
+    'Croissant', 'Pretzel', 'Popcorn', 'Milkshake', 'Smoothie', 'Lemonade', 'Espresso', 'Spaghetti', 'Ramen', 'Dumpling',
+    'Cheesecake', 'Brownie', 'Macaron', 'Tiramisu', 'Lasagna',
+
+    // Buildings & Places (20)
+    'Castle', 'Pyramid', 'Lighthouse', 'Windmill', 'Skyscraper', 'Cathedral', 'Temple', 'Observatory', 'Stadium', 'Museum',
+    'Library', 'Hospital', 'Airport', 'Bridge', 'Fountain', 'Statue', 'Monument', 'Pagoda', 'Mansion', 'Cottage',
+
+    // Sports & Games (20)
+    'Basketball', 'Football', 'Tennis', 'Baseball', 'Volleyball', 'Bowling', 'Archery', 'Fencing', 'Surfing', 'Skateboard',
+    'Snowboard', 'Parachute', 'Trampoline', 'Darts', 'Billiards', 'Badminton', 'Cricket', 'Hockey', 'Golf', 'Wrestling',
+
+    // Professions (15)
+    'Wizard', 'Astronaut', 'Detective', 'Firefighter', 'Scientist', 'Artist', 'Musician', 'Chef', 'Pilot', 'Surgeon',
+    'Architect', 'Engineer', 'Photographer', 'Magician', 'Ninja',
+
+    // Vehicles & Transportation (15)
+    'Helicopter', 'Submarine', 'Spaceship', 'Motorcycle', 'Sailboat', 'Hovercraft', 'Ambulance', 'Firetruck', 'Bulldozer',
+    'Tractor', 'Scooter', 'Skateboard', 'Rollerblades', 'Jetpack', 'Balloon',
+
+    // Actions & Activities (15)
+    'Dancing', 'Singing', 'Jumping', 'Swimming', 'Climbing', 'Painting', 'Reading', 'Writing', 'Cooking', 'Gardening',
+    'Fishing', 'Camping', 'Hiking', 'Meditation', 'Yoga',
+
+    // Abstract & Emotions (10)
+    'Happiness', 'Surprise', 'Confusion', 'Excitement', 'Curiosity', 'Dream', 'Nightmare', 'Victory', 'Celebration', 'Mystery'
+];
 
 function startNextRound(io, roomId) {
     const room = gameRooms[roomId];
