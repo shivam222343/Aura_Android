@@ -19,6 +19,24 @@ exports.createNote = async (req, res) => {
             lastModifiedBy: req.user._id
         });
 
+        // Broadcast to club if public
+        if (note.isPublic && note.clubId) {
+            const io = req.app.get('io');
+            if (io) {
+                io.to(note.clubId.toString()).emit('note:list_update', {
+                    type: 'create',
+                    note: {
+                        ...note.toObject(),
+                        userId: {
+                            _id: req.user._id,
+                            displayName: req.user.displayName,
+                            profilePicture: req.user.profilePicture
+                        }
+                    }
+                });
+            }
+        }
+
         res.status(201).json({
             success: true,
             data: note
@@ -130,7 +148,27 @@ exports.updateNote = async (req, res) => {
         note = await Note.findByIdAndUpdate(req.params.id, updateData, {
             new: true,
             runValidators: true
-        });
+        }).populate('userId', 'displayName profilePicture');
+
+        // Broadcast list updates if it's public or was public
+        if (note.clubId) {
+            const io = req.app.get('io');
+            if (io) {
+                if (note.isPublic) {
+                    // Send update or create (if it just became public)
+                    io.to(note.clubId.toString()).emit('note:list_update', {
+                        type: 'create', // Use 'create' to ensure it appears in lists of others
+                        note: note
+                    });
+                } else {
+                    // It became personal, remove from others' lists
+                    io.to(note.clubId.toString()).emit('note:list_update', {
+                        type: 'delete',
+                        noteId: note._id
+                    });
+                }
+            }
+        }
 
         res.status(200).json({
             success: true,
@@ -158,7 +196,22 @@ exports.deleteNote = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Only the owner can delete this note' });
         }
 
+        const clubId = note.clubId;
+        const isPublic = note.isPublic;
+        const noteId = note._id;
+
         await note.deleteOne();
+
+        // Broadcast to club room if it was public
+        if (isPublic && clubId) {
+            const io = req.app.get('io');
+            if (io) {
+                io.to(clubId.toString()).emit('note:list_update', {
+                    type: 'delete',
+                    noteId: noteId
+                });
+            }
+        }
 
         res.status(200).json({
             success: true,

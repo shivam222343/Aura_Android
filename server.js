@@ -107,13 +107,19 @@ io.on('connection', (socket) => {
 
         try {
             const User = require('./src/models/User');
+            const user = await User.findById(userId);
+            if (user) {
+                socket.userDisplayName = user.displayName;
+                socket.userProfilePicture = user.profilePicture;
+            }
+
             const now = new Date();
             await User.findByIdAndUpdate(userId, {
                 isOnline: true,
                 lastSeen: now
             });
             socket.broadcast.emit('user:status', { userId, isOnline: true, lastSeen: now });
-            console.log(`👤 User ${userId} is now online`);
+            console.log(`👤 User ${userId} (${user?.displayName || 'Unknown'}) is now online`);
         } catch (error) {
             console.error('Error updating user online status:', error);
         }
