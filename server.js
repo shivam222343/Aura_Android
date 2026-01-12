@@ -94,6 +94,7 @@ app.use('/api/analytics', require('./src/routes/analytics'));
 app.use('/api/users', require('./src/routes/users'));
 app.use('/api/group-chat', require('./src/routes/groupChat'));
 app.use('/api/web-upload', require('./src/routes/webUpload'));
+app.use('/api/notes', require('./src/routes/notes'));
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
@@ -146,6 +147,7 @@ io.on('connection', (socket) => {
      * Maverick Games Socket Handlers
      */
     require('./src/sockets/gameSocket')(io, socket);
+    require('./src/sockets/noteSocket')(io, socket);
 
     // Explicit offline
     socket.on('user:offline', async (userId) => {
