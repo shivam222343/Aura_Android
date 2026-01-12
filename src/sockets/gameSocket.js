@@ -384,6 +384,19 @@ module.exports = (io, socket) => {
                     console.log(`👑 New host assigned to room ${roomId}: ${room.hostName}`);
                 }
                 io.to(roomId).emit('game:update', room);
+
+                // Meme Match: If everyone voted/submitted, end phase early
+                if (room.gameType === 'meme_match') {
+                    memeMatchHandler.checkMemePhaseCompletion(io, roomId, gameRooms);
+                }
+
+                // Sketch Heads: If everyone guessed, end round early
+                if (room.gameType === 'sketch_heads' && room.status === 'playing') {
+                    const guessersCount = room.players.length - 1;
+                    if (room.state.correctGuessers && room.state.correctGuessers.length >= guessersCount) {
+                        endRound(io, roomId);
+                    }
+                }
             }
 
             broadcastRoomList(io, room.clubId, room.gameType);
@@ -412,6 +425,19 @@ module.exports = (io, socket) => {
                         room.hostName = newHost.userName;
                     }
                     io.to(roomId).emit('game:update', room);
+
+                    // Meme Match: If everyone voted/submitted, end phase early
+                    if (room.gameType === 'meme_match') {
+                        memeMatchHandler.checkMemePhaseCompletion(io, roomId, gameRooms);
+                    }
+
+                    // Sketch Heads: If everyone guessed, end round early
+                    if (room.gameType === 'sketch_heads' && room.status === 'playing') {
+                        const guessersCount = room.players.length - 1;
+                        if (room.state.correctGuessers && room.state.correctGuessers.length >= guessersCount) {
+                            endRound(io, roomId);
+                        }
+                    }
                 }
                 broadcastRoomList(io, room.clubId, room.gameType);
             }

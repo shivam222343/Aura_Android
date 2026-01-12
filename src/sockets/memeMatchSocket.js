@@ -167,6 +167,33 @@ const handlers = {
         }, 1000);
     },
 
+    checkMemePhaseCompletion: (io, roomId, gameRooms) => {
+        const room = gameRooms[roomId];
+        if (!room || !room.state) return;
+
+        if (room.state.phase === 'submitting') {
+            if (room.state.submissions.length >= room.players.length && room.players.length >= 2) {
+                console.log(`🏎️ Round ${room.state.currentRound}: All ${room.players.length} players submitted. Starting voting early.`);
+                if (room.state.timer) {
+                    clearInterval(room.state.timer);
+                    room.state.timer = null;
+                }
+                handlers.startVotingPhase(io, roomId, gameRooms);
+            }
+        } else if (room.state.phase === 'voting') {
+            const votedCount = Object.keys(room.state.votes || {}).length;
+            if (votedCount >= room.players.length && room.players.length >= 2) {
+                console.log(`🏎️ Round ${room.state.currentRound}: All ${room.players.length} players voted. Ending round early.`);
+                if (room.state.timer) {
+                    clearInterval(room.state.timer);
+                    room.state.timer = null;
+                }
+                handlers.endMemeMatchRound(io, roomId, gameRooms);
+            }
+        }
+    },
+
+
     startVotingPhase: (io, roomId, gameRooms) => {
         const room = gameRooms[roomId];
         if (!room) return;
@@ -306,8 +333,7 @@ const handlers = {
             });
 
             if (room.state.submissions.length === room.players.length) {
-                clearInterval(room.state.timer);
-                handlers.startVotingPhase(io, roomId, gameRooms);
+                handlers.checkMemePhaseCompletion(io, roomId, gameRooms);
             }
         });
 
@@ -333,8 +359,7 @@ const handlers = {
             });
 
             if (Object.keys(room.state.votes).length === room.players.length) {
-                clearInterval(room.state.timer);
-                handlers.endMemeMatchRound(io, roomId, gameRooms);
+                handlers.checkMemePhaseCompletion(io, roomId, gameRooms);
             }
         });
 
@@ -350,6 +375,8 @@ const handlers = {
                     io.to(roomId).emit('memematch:player_left', {
                         players: room.players
                     });
+                    // Check if phase should complete now that total count decreased
+                    handlers.checkMemePhaseCompletion(io, roomId, gameRooms);
                 }
 
                 // Broadcast updated room list
