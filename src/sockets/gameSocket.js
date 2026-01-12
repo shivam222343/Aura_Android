@@ -36,7 +36,7 @@ module.exports = (io, socket) => {
             const clubMatch = clubId === 'all' || r.clubId === clubId || r.clubId === 'all';
             return clubMatch && r.gameType === gameType && r.status === 'lobby';
         });
-        socket.emit('games:rooms_list', { rooms: activeRooms, gameType });
+        socket.emit('games:rooms_list', { rooms: activeRooms, gameType, clubId });
     });
 
     // 🚀 Host a Game
