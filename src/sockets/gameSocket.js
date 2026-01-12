@@ -26,8 +26,8 @@ function broadcastRoomList(io, clubId, gameType) {
 
 module.exports = (io, socket) => {
     // Inject dependencies into specialized handlers
-    codeBreakerHandler.init && codeBreakerHandler.init(io, gameRooms, broadcastRoomList);
-    memeMatchHandler.init && memeMatchHandler.init(io, gameRooms, broadcastRoomList);
+    codeBreakerHandler.initDeps && codeBreakerHandler.initDeps(io, gameRooms, broadcastRoomList);
+    memeMatchHandler.initDeps && memeMatchHandler.initDeps(io, gameRooms, broadcastRoomList);
 
     // 🎲 Get Active Rooms for a Club
     socket.on('games:get_rooms', (data) => {

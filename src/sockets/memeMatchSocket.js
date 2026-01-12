@@ -82,7 +82,7 @@ let _gameRooms;
 let _broadcastRoomList;
 
 const handlers = {
-    init: (io, gameRooms, broadcastRoomList) => {
+    initDeps: (io, gameRooms, broadcastRoomList) => {
         _io = io;
         _gameRooms = gameRooms;
         _broadcastRoomList = broadcastRoomList;
