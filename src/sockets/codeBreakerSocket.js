@@ -90,6 +90,7 @@ const handlers = {
         room.state = {
             currentRound: 1,
             currentTurnIndex: 0,
+            phase: 'picking',
             players: room.players.map(p => ({ ...p, score: 0, turnScore: 0 }))
         };
 
