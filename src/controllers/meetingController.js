@@ -394,10 +394,15 @@ exports.startAttendance = async (req, res) => {
 
         meeting.attendanceCode = code;
         meeting.isAttendanceActive = true;
+        meeting.status = 'Ongoing'; // Automatically make meeting Ongoing
         // Expires in 15 mins
         // meeting.qrCode.expiresAt = new Date(Date.now() + 15*60000); 
 
         await meeting.save();
+
+        // Invalidate caches
+        await delCache(`club:meetings:${clubId}`);
+        await delCache(`user:dashboard:${req.user._id}`);
 
         res.status(200).json({
             success: true,
@@ -531,7 +536,12 @@ exports.manualAttendance = async (req, res) => {
             }
         });
 
+        meeting.status = 'Ongoing'; // Automatically make meeting Ongoing
         await meeting.save();
+
+        // Invalidate caches
+        await delCache(`club:meetings:${meeting.clubId}`);
+        await delCache(`user:dashboard:${req.user._id}`);
 
         // Create notifications for users marked present
         if (status === 'present') {
