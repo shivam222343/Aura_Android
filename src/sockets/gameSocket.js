@@ -5,12 +5,23 @@ const memeMatchHandler = require('./memeMatchSocket');
 const gameRooms = {}; // In-memory storage for active game rooms
 
 function broadcastRoomList(io, clubId, gameType) {
+    console.log(`📡 Broadcasting Room List: club=${clubId}, type=${gameType}`);
+
     // Rooms to show for this specific club
-    const clubRooms = Object.values(gameRooms).filter(r =>
-        (r.clubId === clubId || r.clubId === 'all') &&
-        r.gameType === gameType &&
-        r.status === 'lobby'
-    );
+    const clubRooms = Object.values(gameRooms).filter(r => {
+        const clubMatch = (r.clubId === clubId || r.clubId === 'all');
+        const typeMatch = r.gameType === gameType;
+        const statusMatch = r.status === 'lobby';
+        if (!clubMatch || !typeMatch || !statusMatch) {
+            // console.log(`   ❌ Room ${r.roomId} excluded: clubMatch=${clubMatch}, typeMatch=${typeMatch}, statusMatch=${statusMatch}`);
+        }
+        return clubMatch && typeMatch && statusMatch;
+    });
+
+    console.log(`   -> Found ${clubRooms.length} rooms for club ${clubId} among ${Object.keys(gameRooms).length} total rooms`);
+    if (clubRooms.length === 0 && Object.keys(gameRooms).length > 0) {
+        console.log('   -> Current Rooms:', JSON.stringify(Object.values(gameRooms).map(r => ({ id: r.roomId, club: r.clubId, status: r.status, type: r.gameType }))));
+    }
 
     if (clubId !== 'all') {
         io.to(`club:${clubId}`).emit('games:rooms_list', { rooms: clubRooms, gameType, clubId });
@@ -21,6 +32,8 @@ function broadcastRoomList(io, clubId, gameType) {
         r.gameType === gameType &&
         r.status === 'lobby'
     );
+
+    console.log(`   -> Found ${allRooms.length} rooms for 'all'`);
     io.to('club:all').emit('games:rooms_list', { rooms: allRooms, gameType, clubId: 'all' });
 }
 
