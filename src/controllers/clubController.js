@@ -281,56 +281,51 @@ exports.addMemberToClub = async (req, res) => {
 
         await user.save();
 
-        // Secondary operations - handle gracefully if they fail
-        try {
-            // Sync with GroupChat
-            const GroupChat = require('../models/GroupChat');
-            let groupChat = await GroupChat.findOne({ clubId: club._id });
-            if (groupChat) {
-                const isAlreadyMember = groupChat.members.some(m => m.userId.toString() === user._id.toString());
-                if (!isAlreadyMember) {
-                    groupChat.members.push({ userId: user._id, role: 'member' });
-                    await groupChat.save();
-                }
-            } else {
-                // Create group chat if it doesn't exist
-                await GroupChat.create({
-                    clubId: club._id,
-                    members: [{ userId: user._id, role: 'member' }],
-                    messages: []
-                });
+        // Sync with GroupChat
+        const GroupChat = require('../models/GroupChat');
+        let groupChat = await GroupChat.findOne({ clubId: club._id });
+        if (groupChat) {
+            const isAlreadyMember = groupChat.members.some(m => m.userId.toString() === user._id.toString());
+            if (!isAlreadyMember) {
+                groupChat.members.push({ userId: user._id, role: 'member' });
+                await groupChat.save();
             }
-
-            // Emit socket event for real-time members update
-            const io = req.app.get('io');
-            if (io) {
-                io.to(`club:${clubId}`).emit('club:members:update', { clubId });
-                // Trigger in-app refresh for the user
-                io.to(user._id.toString()).emit('notification_receive', {});
-            }
-
-            // Invalidate club members cache
-            await delCache(`club:members:${clubId}`);
-
-            // Create Persistent Notification
-            await Notification.create({
-                userId: user._id,
-                type: 'member_added',
-                title: `Welcome to ${club.name}! 🎊`,
-                message: `You have been added to the club ${club.name} as a ${user.role}.`,
-                clubId: clubId
+        } else {
+            // Create group chat if it doesn't exist
+            await GroupChat.create({
+                clubId: club._id,
+                members: [{ userId: user._id, role: 'member' }],
+                messages: []
             });
-
-            // Send Push Notification
-            await sendPushNotification(user._id, {
-                title: `Welcome to ${club.name}! 🎊`,
-                body: `You are now a member of ${club.name}.`,
-                data: { screen: 'Dashboard', clubId: clubId }
-            });
-        } catch (secondaryError) {
-            console.error('[Club] Error in secondary operations (GroupChat/Notif):', secondaryError);
-            // Don't fail the main request since user was already saved
         }
+
+        // Emit socket event for real-time members update
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${clubId}`).emit('club:members:update', { clubId });
+        }
+
+        // Invalidate club members cache
+        await delCache(`club:members:${clubId}`);
+
+        // Create Persistent Notification
+        await Notification.create({
+            userId: user._id,
+            type: 'member_added',
+            title: `Welcome to ${club.name}! 🎊`,
+            message: `You have been added to the club ${club.name} as a ${user.role}.`,
+            clubId: clubId
+        });
+
+        // Trigger in-app refresh for the user
+        io?.to(user._id.toString()).emit('notification_receive', {});
+
+        // Send Push Notification
+        await sendPushNotification(user._id, {
+            title: `Welcome to ${club.name}! 🎊`,
+            body: `You are now a member of ${club.name}.`,
+            data: { screen: 'Dashboard', clubId: clubId }
+        });
 
         res.status(200).json({
             success: true,
