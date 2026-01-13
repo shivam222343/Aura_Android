@@ -236,7 +236,7 @@ const handlers = {
                     handlers.startNextMemeMatchRound(io, roomId, gameRooms);
                 }
             }
-        }, 8000);
+        }, 5000);
     },
 
     endMemeMatchGame: (io, roomId, gameRooms) => {
