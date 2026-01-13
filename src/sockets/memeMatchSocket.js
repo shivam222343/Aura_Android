@@ -49,16 +49,24 @@ const handlers = {
         const room = gameRooms[roomId];
         if (!room) return;
 
+        // Update room status
+        room.status = 'active';
+
         // Initialize game state for quiz
         room.state = {
             currentRound: 0,
             players: room.players.map(p => ({ ...p, score: 0, roundScore: 0 })),
-            answers: {}, // userId: { answer, timestamp, isCorrect }
+            answers: {},
             phase: 'waiting'
         };
 
-        // Start first round
-        handlers.startNextMemeMatchRound(io, roomId, gameRooms);
+        // Notify all players that game is starting to transition UI
+        io.to(roomId).emit('game:update', room);
+
+        // Start first round with a short delay to allow UI transition
+        setTimeout(() => {
+            handlers.startNextMemeMatchRound(io, roomId, gameRooms);
+        }, 2000);
     },
 
     startNextMemeMatchRound: (io, roomId, gameRooms) => {
@@ -88,6 +96,9 @@ const handlers = {
             options: options,
             timeLimit: 30
         });
+
+        // Also broadcast the full state update for perfect sync
+        io.to(roomId).emit('game:update', room);
 
         // Start timer
         handlers.startMemeMatchTimer(io, roomId, gameRooms, 'answering');
@@ -177,6 +188,9 @@ const handlers = {
         };
 
         io.to(roomId).emit('memematch:round_end', results);
+
+        // Sync state to all
+        io.to(roomId).emit('game:update', room);
 
         // Move to next round or end game
         setTimeout(() => {
