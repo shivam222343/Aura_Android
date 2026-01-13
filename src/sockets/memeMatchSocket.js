@@ -7,13 +7,20 @@ function getRandomDialogue() {
     return movieDialogues[Math.floor(Math.random() * movieDialogues.length)];
 }
 
-function generateQuizOptions(correctMovie) {
-    // Get 3 random wrong options from different movies
+function generateQuizOptions(correctMovie, language) {
+    // Get 3 random wrong options from different movies but within the SAME language
     const wrongOptions = [];
     const usedMovies = new Set([correctMovie]);
 
+    // Filter dialogues by the same language
+    const langMovies = movieDialogues.filter(d => d.language === language);
+
+    // If we don't have enough movies in that language (unlikely but safe), 
+    // fall back to all dialogues
+    const sourcePool = langMovies.length >= 4 ? langMovies : movieDialogues;
+
     while (wrongOptions.length < 3) {
-        const randomDialogue = movieDialogues[Math.floor(Math.random() * movieDialogues.length)];
+        const randomDialogue = sourcePool[Math.floor(Math.random() * sourcePool.length)];
         if (!usedMovies.has(randomDialogue.movie)) {
             wrongOptions.push(randomDialogue.movie);
             usedMovies.add(randomDialogue.movie);
@@ -75,7 +82,7 @@ const handlers = {
 
         // Get random dialogue and generate options
         const quizData = getRandomDialogue();
-        const options = generateQuizOptions(quizData.movie);
+        const options = generateQuizOptions(quizData.movie, quizData.language);
 
         room.state.currentRound = (room.state.currentRound || 0) + 1;
         room.state.currentDialogue = quizData.dialogue;
@@ -87,6 +94,12 @@ const handlers = {
         room.state.timeRemaining = 30; // 30 seconds to answer
         room.state.roundStartTime = Date.now();
 
+        // Broadcast initial answer count
+        io.to(roomId).emit('memematch:answer_count', {
+            answered: 0,
+            total: room.players.length
+        });
+
         // Send quiz question to all players
         io.to(roomId).emit('memematch:question', {
             round: room.state.currentRound,
@@ -94,7 +107,8 @@ const handlers = {
             dialogue: quizData.dialogue,
             language: quizData.language,
             options: options,
-            timeLimit: 30
+            timeLimit: 30,
+            totalPlayers: room.players.length
         });
 
         // Also broadcast the full state update for perfect sync
@@ -131,6 +145,25 @@ const handlers = {
                 handlers.endMemeMatchRound(io, roomId, gameRooms);
             }
         }, 1000);
+    },
+
+    checkMemePhaseCompletion: (io, roomId, gameRooms) => {
+        const room = gameRooms[roomId];
+        if (!room || room.state.phase !== 'answering') return;
+
+        const answeredCount = Object.keys(room.state.answers).length;
+        const totalPlayers = room.players.length;
+
+        // Update everyone on the new count
+        io.to(roomId).emit('memematch:answer_count', {
+            answered: answeredCount,
+            total: totalPlayers
+        });
+
+        // If everyone remaining has answered, end the round
+        if (answeredCount >= totalPlayers && totalPlayers > 0) {
+            handlers.endMemeMatchRound(io, roomId, gameRooms);
+        }
     },
 
 

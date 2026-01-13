@@ -167,9 +167,15 @@ module.exports = (io, socket) => {
         const { roomId, userId, userName } = data;
         const room = gameRooms[roomId];
 
-        if (room && room.status === 'lobby' && room.players.length < 8) {
-            const alreadyIn = room.players.find(p => p.userId === userId);
-            if (!alreadyIn) {
+        if (room) {
+            // Check if player is already in
+            const existingPlayerIndex = room.players.findIndex(p => p.userId === userId);
+
+            if (existingPlayerIndex !== -1) {
+                // Update socket ID for existing player (reconnect case)
+                room.players[existingPlayerIndex].socketId = socket.id;
+            } else if (room.players.length < 8) {
+                // Add new player
                 room.players.push({
                     userId,
                     userName,
@@ -177,16 +183,21 @@ module.exports = (io, socket) => {
                     isReady: true,
                     socketId: socket.id
                 });
+            } else {
+                return socket.emit('game:error', { message: 'Room is full' });
             }
+
             socket.join(roomId);
             io.to(roomId).emit('game:update', room);
 
-            // Broadcast updated room list
-            broadcastRoomList(io, room.clubId, room.gameType);
+            // Broadcast updated room list if still in lobby
+            if (room.status === 'lobby') {
+                broadcastRoomList(io, room.clubId, room.gameType);
+            }
 
-            console.log(`👤 User ${userName} joined game room ${roomId}`);
+            console.log(`👤 User ${userName} joined/reconnected to game room ${roomId}`);
         } else {
-            socket.emit('game:error', { message: 'Room full or already started' });
+            socket.emit('game:error', { message: 'Room not found' });
         }
     });
 
