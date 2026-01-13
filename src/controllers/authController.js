@@ -533,15 +533,32 @@ exports.getDashboardData = async (req, res) => {
 
         const processedRecentMeetings = recentActivity.map(m => {
             const attendee = m.attendees.find(a => a.userId.toString() === userId.toString());
+            const absenceRequest = m.absenceRequests.find(a => a.userId.toString() === userId.toString());
+
             let attendanceStatus = 'Upcoming';
-            if (new Date(m.date) < now) {
-                if (attendee) {
-                    attendanceStatus = (attendee.status === 'present' || attendee.status === 'late') ? 'Attended' : 'Not Attended';
+
+            if (m.status === 'completed' || m.status === 'ongoing') {
+                if (attendee && (attendee.status === 'present' || attendee.status === 'late')) {
+                    attendanceStatus = 'Attended';
+                } else if (absenceRequest && absenceRequest.status === 'approved') {
+                    attendanceStatus = 'Excused';
+                } else if (m.status === 'completed') {
+                    attendanceStatus = 'Not Attended';
+                } else {
+                    attendanceStatus = 'Live';
+                }
+            } else if (m.status === 'canceled' || m.status === 'cancelled') {
+                attendanceStatus = 'Canceled';
+            } else if (new Date(m.date) < now) {
+                if (attendee && (attendee.status === 'present' || attendee.status === 'late')) {
+                    attendanceStatus = 'Attended';
+                } else if (absenceRequest && absenceRequest.status === 'approved') {
+                    attendanceStatus = 'Excused';
                 } else {
                     attendanceStatus = 'Missed';
                 }
-            } else if (attendee && (attendee.status === 'present' || attendee.status === 'late')) {
-                attendanceStatus = 'Attended';
+            } else {
+                attendanceStatus = 'Upcoming';
             }
 
             return {
