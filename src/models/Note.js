@@ -19,17 +19,24 @@ const noteSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    contentDelta: {
+        type: Object, // Stores Quill-style Deltas or structured block data
+        default: { ops: [{ insert: '\n' }] }
+    },
     isPublic: {
         type: Boolean,
         default: false
     },
+    history: [{
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        op: Object,
+        timestamp: { type: Date, default: Date.now }
+    }],
     styles: {
         fontSize: { type: Number, default: 16 },
         fontFamily: { type: String, default: 'System' },
-        color: { type: String, default: '#000000' },
-        isBold: { type: Boolean, default: false },
-        isItalic: { type: Boolean, default: false },
-        isUnderline: { type: Boolean, default: false },
+        lineHeight: { type: Number, default: 1.5 },
+        color: { type: String, default: '#1F2937' },
         textAlign: { type: String, default: 'left' }
     },
     collaborators: [{

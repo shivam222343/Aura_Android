@@ -7,13 +7,13 @@ const Note = require('../models/Note');
  */
 exports.createNote = async (req, res) => {
     try {
-        const { title, content, clubId, isPublic, styles } = req.body;
-
+        const { title, content, contentDelta, clubId, isPublic, styles } = req.body;
         const note = await Note.create({
             userId: req.user._id,
             clubId: clubId || null,
             title: title || 'Untitled Note',
             content: content || '',
+            contentDelta: contentDelta || { ops: [{ insert: '\n' }] },
             isPublic: isPublic || false,
             styles: styles || {},
             lastModifiedBy: req.user._id
@@ -157,7 +157,7 @@ exports.getNoteById = async (req, res) => {
  */
 exports.updateNote = async (req, res) => {
     try {
-        const { title, content, styles, isPublic } = req.body;
+        const { title, content, contentDelta, styles, isPublic, clubId } = req.body;
 
         let note = await Note.findById(req.params.id);
 
@@ -176,6 +176,7 @@ exports.updateNote = async (req, res) => {
         const updateData = {};
         if (title !== undefined) updateData.title = title;
         if (content !== undefined) updateData.content = content;
+        if (contentDelta !== undefined) updateData.contentDelta = contentDelta;
         if (styles !== undefined) updateData.styles = styles;
         if (clubId !== undefined && isOwner) updateData.clubId = clubId;
         if (isPublic !== undefined && isOwner) updateData.isPublic = isPublic;
@@ -212,7 +213,11 @@ exports.updateNote = async (req, res) => {
             data: note
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Error updating note' });
+        console.error('[NoteController] Update error:', error);
+        res.status(500).json({
+            success: false,
+            message: process.env.NODE_ENV === 'development' ? error.message : 'Error updating note'
+        });
     }
 };
 

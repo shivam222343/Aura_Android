@@ -82,28 +82,26 @@ module.exports = (io, socket) => {
         }
     });
 
-    // Live update of content/styles - optimized to avoid excessive broadcasts
-    socket.on('note:update', async (data) => {
-        const { noteId, content, styles, title, isPublic, clubId, selection } = data;
+    // Operational Sync - Handles structured updates (Deltas/Blocks)
+    socket.on('note:op', async (data) => {
+        const { noteId, delta, selection, title, isPublic, clubId } = data;
 
-        // Broadcast to everyone else in the note room
-        socket.to(`note:${noteId}`).emit('note:change', {
-            content,
-            styles,
-            title,
-            isPublic,
-            selection, // Relay selection/cursor for other users
+        // Broadcast the operation to other collaborators
+        socket.to(`note:${noteId}`).emit('note:op_received', {
+            noteId,
+            delta,
+            selection,
             updatedBy: socket.userId,
             timestamp: Date.now()
         });
 
         // Also notify the club room for list updates if note is public
-        if (isPublic && clubId) {
+        if (isPublic && clubId && title) {
             io.to(clubId.toString()).emit('note:list_update', {
                 type: 'update',
                 noteId,
                 title,
-                content: content ? content.replace(/<[^>]*>?/gm, '').substring(0, 100) : '', // Strip HTML for snippet
+                content: data.plainTextSnippet || '', // Optional snippet for UI
                 updatedAt: new Date()
             });
         }
@@ -111,10 +109,28 @@ module.exports = (io, socket) => {
 
     // Cursor movement (relay only)
     socket.on('note:cursor', (data) => {
-        const { noteId, cursor } = data;
+        const { noteId, cursor, selection } = data;
         socket.to(`note:${noteId}`).emit('note:cursor_move', {
             userId: socket.userId,
-            cursor
+            displayName: socket.userDisplayName,
+            profilePicture: socket.userProfilePicture,
+            cursor,
+            selection
+        });
+    });
+
+    // Live update of content/styles - preserved for backward compatibility/initial load
+    socket.on('note:update', async (data) => {
+        const { noteId, content, contentDelta, styles, title, isPublic, clubId } = data;
+
+        socket.to(`note:${noteId}`).emit('note:change', {
+            content,
+            contentDelta,
+            styles,
+            title,
+            isPublic,
+            updatedBy: socket.userId,
+            timestamp: Date.now()
         });
     });
 
