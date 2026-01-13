@@ -1,70 +1,28 @@
-// Meme Match Game Socket Handler
+// Meme Match Game Socket Handler - Movie Dialogue Quiz
 
-// Situation database
-const SITUATIONS = [
-    // Work/Office (10)
-    "When you realize it's Monday tomorrow",
-    "When your boss asks if you can work this weekend",
-    "When you accidentally reply all to a company email",
-    "When the meeting could have been an email",
-    "When you're pretending to work but scrolling social media",
-    "When someone takes credit for your idea",
-    "When the WiFi goes down during an important presentation",
-    "When you see your coworker eating your lunch from the fridge",
-    "When you get a meeting invite for 5pm on Friday",
-    "When you're asked to explain what you do at family gatherings",
+// Load movie dialogues database
+const movieDialogues = require('../data/movieDialogues');
 
-    // School/College (10)
-    "When the teacher says 'this will be on the test'",
-    "When you studied the wrong chapter for the exam",
-    "When the professor extends the deadline",
-    "When you realize the assignment is due in 1 hour",
-    "When someone asks to copy your homework",
-    "When the group project member finally replies",
-    "When you're called on and weren't paying attention",
-    "When the cafeteria runs out of your favorite food",
-    "When you see your exam results",
-    "When you're trying to reach the word count on an essay",
+function getRandomDialogue() {
+    return movieDialogues[Math.floor(Math.random() * movieDialogues.length)];
+}
 
-    // Relationships (10)
-    "When they text 'we need to talk'",
-    "When you're introduced to your partner's parents",
-    "When you see your ex with someone new",
-    "When they say 'I'm fine' but they're clearly not",
-    "When you're waiting for a text back",
-    "When you accidentally like their old photo while stalking",
-    "When they remember something you mentioned once",
-    "When you're trying to act cool but you're nervous",
-    "When they ask 'what are you thinking about?'",
-    "When you realize you're catching feelings",
+function generateQuizOptions(correctMovie) {
+    // Get 3 random wrong options from different movies
+    const wrongOptions = [];
+    const usedMovies = new Set([correctMovie]);
 
-    // Technology (10)
-    "When your phone battery dies at 1%",
-    "When you can't find your phone and it's on silent",
-    "When autocorrect changes your message to something weird",
-    "When you're trying to take a selfie in public",
-    "When the video buffers at the best part",
-    "When you accidentally open the front camera",
-    "When you delete something important by mistake",
-    "When your earphones get tangled in your pocket",
-    "When you're waiting for a download to finish",
-    "When someone calls instead of texting",
+    while (wrongOptions.length < 3) {
+        const randomDialogue = movieDialogues[Math.floor(Math.random() * movieDialogues.length)];
+        if (!usedMovies.has(randomDialogue.movie)) {
+            wrongOptions.push(randomDialogue.movie);
+            usedMovies.add(randomDialogue.movie);
+        }
+    }
 
-    // Random/Absurd (10)
-    "When you're home alone and hear a noise",
-    "When you wave back at someone who wasn't waving at you",
-    "When you're trying to be quiet but everything is loud",
-    "When you realize you've been talking to yourself",
-    "When you're pretending to understand something",
-    "When you see someone you know in public and hide",
-    "When you're walking and forget how to walk normally",
-    "When you're laughing at your own joke",
-    "When you're trying to remember why you entered a room",
-    "When you realize everyone can see your screen"
-];
-
-function getRandomSituation() {
-    return SITUATIONS[Math.floor(Math.random() * SITUATIONS.length)];
+    // Combine correct and wrong options, then shuffle
+    const allOptions = [correctMovie, ...wrongOptions];
+    return shuffleArray(allOptions);
 }
 
 function shuffleArray(array) {
@@ -91,12 +49,11 @@ const handlers = {
         const room = gameRooms[roomId];
         if (!room) return;
 
-        // Initialize game state
+        // Initialize game state for quiz
         room.state = {
             currentRound: 0,
-            players: room.players.map(p => ({ ...p, score: 0, turnScore: 0 })),
-            submissions: [],
-            votes: {},
+            players: room.players.map(p => ({ ...p, score: 0, roundScore: 0 })),
+            answers: {}, // userId: { answer, timestamp, isCorrect }
             phase: 'waiting'
         };
 
@@ -108,30 +65,32 @@ const handlers = {
         const room = gameRooms[roomId];
         if (!room) return;
 
-        const situation = getRandomSituation();
+        // Get random dialogue and generate options
+        const quizData = getRandomDialogue();
+        const options = generateQuizOptions(quizData.movie);
 
         room.state.currentRound = (room.state.currentRound || 0) + 1;
-        room.state.situation = situation;
-        room.state.submissions = [];
-        room.state.votes = {};
-        room.state.phase = 'submitting';
-        room.state.timeRemaining = 60;
-        room.state.votingStarted = false;
+        room.state.currentDialogue = quizData.dialogue;
+        room.state.correctMovie = quizData.movie;
+        room.state.language = quizData.language;
+        room.state.options = options;
+        room.state.answers = {};
+        room.state.phase = 'answering';
+        room.state.timeRemaining = 30; // 30 seconds to answer
+        room.state.roundStartTime = Date.now();
 
-        io.to(roomId).emit('memematch:situation', {
+        // Send quiz question to all players
+        io.to(roomId).emit('memematch:question', {
             round: room.state.currentRound,
             totalRounds: room.config.totalRounds,
-            situation,
-            timeLimit: 60
+            dialogue: quizData.dialogue,
+            language: quizData.language,
+            options: options,
+            timeLimit: 30
         });
 
-        // We need access to the internal startTimer function. 
-        // Since we are decoupling, we might need to expose it or duplicate the timer logic.
-        // For simplicity in this architecture, we will rely on a new timer starter or move the timer logic here.
-        // However, the timer uses setInterval which needs to be stored on room.state.
-
-        // Let's define the timer logic helper inside handlers to be used by both
-        handlers.startMemeMatchTimer(io, roomId, gameRooms, 'submitting');
+        // Start timer
+        handlers.startMemeMatchTimer(io, roomId, gameRooms, 'answering');
     },
 
     startMemeMatchTimer: (io, roomId, gameRooms, phase) => {
@@ -142,7 +101,7 @@ const handlers = {
             clearInterval(room.state.timer);
         }
 
-        const timeLimit = phase === 'submitting' ? 60 : 30;
+        const timeLimit = 30; // 30 seconds for answering
         room.state.timeRemaining = timeLimit;
 
         room.state.timer = setInterval(() => {
@@ -157,62 +116,12 @@ const handlers = {
 
             if (currentRoom.state.timeRemaining <= 0) {
                 clearInterval(currentRoom.state.timer);
-
-                if (phase === 'submitting') {
-                    handlers.startVotingPhase(io, roomId, gameRooms);
-                } else if (phase === 'voting') {
-                    handlers.endMemeMatchRound(io, roomId, gameRooms);
-                }
+                // Time's up - end the round
+                handlers.endMemeMatchRound(io, roomId, gameRooms);
             }
         }, 1000);
     },
 
-    checkMemePhaseCompletion: (io, roomId, gameRooms) => {
-        const room = gameRooms[roomId];
-        if (!room || !room.state) return;
-
-        if (room.state.phase === 'submitting') {
-            if (room.state.submissions.length >= room.players.length && room.players.length >= 2) {
-                console.log(`🏎️ Round ${room.state.currentRound}: All ${room.players.length} players submitted. Starting voting early.`);
-                if (room.state.timer) {
-                    clearInterval(room.state.timer);
-                    room.state.timer = null;
-                }
-                handlers.startVotingPhase(io, roomId, gameRooms);
-            }
-        } else if (room.state.phase === 'voting') {
-            const votedCount = Object.keys(room.state.votes || {}).length;
-            if (votedCount >= room.players.length && room.players.length >= 2) {
-                console.log(`🏎️ Round ${room.state.currentRound}: All ${room.players.length} players voted. Ending round early.`);
-                if (room.state.timer) {
-                    clearInterval(room.state.timer);
-                    room.state.timer = null;
-                }
-                handlers.endMemeMatchRound(io, roomId, gameRooms);
-            }
-        }
-    },
-
-
-    startVotingPhase: (io, roomId, gameRooms) => {
-        const room = gameRooms[roomId];
-        if (!room) return;
-
-        room.state.phase = 'voting';
-        room.state.votingStarted = true;
-
-        const shuffledSubmissions = shuffleArray(room.state.submissions).map(s => ({
-            submissionId: s.submissionId,
-            caption: s.caption
-        }));
-
-        io.to(roomId).emit('memematch:voting_start', {
-            submissions: shuffledSubmissions,
-            timeLimit: 30
-        });
-
-        handlers.startMemeMatchTimer(io, roomId, gameRooms, 'voting');
-    },
 
     endMemeMatchRound: (io, roomId, gameRooms) => {
         const room = gameRooms[roomId];
@@ -225,48 +134,58 @@ const handlers = {
 
         room.state.phase = 'results';
 
-        room.state.submissions.forEach(submission => {
-            const player = room.players.find(p => p.userId === submission.userId);
+        // Calculate scores based on correctness and speed
+        const roundDuration = 30000; // 30 seconds in milliseconds
+        Object.entries(room.state.answers).forEach(([userId, answerData]) => {
+            const player = room.players.find(p => p.userId === userId);
             if (player) {
-                const voteCount = (submission.votes || []).length;
-                const points = voteCount * 100;
+                if (answerData.isCorrect) {
+                    // Base points for correct answer
+                    let points = 1000;
 
-                const maxVotes = Math.max(...room.state.submissions.map(s => (s.votes || []).length));
-                if (voteCount === maxVotes && maxVotes > 0) {
-                    player.score += points + 500;
-                    player.turnScore = points + 500;
-                } else {
+                    // Bonus points for speed (max 500 bonus points)
+                    const timeElapsed = answerData.timestamp - room.state.roundStartTime;
+                    const speedBonus = Math.floor(500 * (1 - (timeElapsed / roundDuration)));
+                    points += Math.max(0, speedBonus);
+
                     player.score += points;
-                    player.turnScore = points;
+                    player.roundScore = points;
+                } else {
+                    player.roundScore = 0;
                 }
-                player.score += 50;
             }
         });
 
-        const sortedSubmissions = [...room.state.submissions].sort((a, b) =>
-            (b.votes || []).length - (a.votes || []).length
-        );
-
-        io.to(roomId).emit('memematch:round_end', {
-            submissions: sortedSubmissions.map(s => ({
-                ...s,
-                voteCount: (s.votes || []).length
+        // Prepare results with correct answer revealed
+        const results = {
+            correctMovie: room.state.correctMovie,
+            dialogue: room.state.currentDialogue,
+            language: room.state.language,
+            playerAnswers: Object.entries(room.state.answers).map(([userId, data]) => ({
+                userId,
+                userName: room.players.find(p => p.userId === userId)?.userName,
+                answer: data.answer,
+                isCorrect: data.isCorrect,
+                points: room.players.find(p => p.userId === userId)?.roundScore || 0
             })),
             scores: room.players.map(p => ({
                 userId: p.userId,
                 userName: p.userName,
                 score: p.score,
-                turnScore: p.turnScore || 0
+                roundScore: p.roundScore || 0
             })).sort((a, b) => b.score - a.score)
-        });
+        };
 
+        io.to(roomId).emit('memematch:round_end', results);
+
+        // Move to next round or end game
         setTimeout(() => {
             const stillExists = gameRooms[roomId];
             if (stillExists) {
                 if (stillExists.state.currentRound >= stillExists.config.totalRounds) {
                     handlers.endMemeMatchGame(io, roomId, gameRooms);
                 } else {
-                    stillExists.players.forEach(p => { p.turnScore = 0; });
+                    stillExists.players.forEach(p => { p.roundScore = 0; });
                     handlers.startNextMemeMatchRound(io, roomId, gameRooms);
                 }
             }
@@ -308,58 +227,33 @@ const handlers = {
             handlers.startNextMemeMatchRound(io, roomId, gameRooms);
         });
 
-        socket.on('memematch:submit', (data) => {
-            const { roomId, userId, userName, caption } = data;
+        socket.on('memematch:answer', (data) => {
+            const { roomId, userId, userName, answer } = data;
             const room = gameRooms[roomId];
 
-            if (!room || room.state.phase !== 'submitting') return;
+            if (!room || room.state.phase !== 'answering') return;
 
-            const existingSubmission = room.state.submissions.find(s => s.userId === userId);
-            if (existingSubmission) {
-                existingSubmission.caption = caption;
-            } else {
-                room.state.submissions.push({
-                    submissionId: `sub_${Date.now()}_${userId}`,
-                    userId,
-                    userName,
-                    caption,
-                    votes: []
-                });
-            }
+            // Check if player already answered
+            if (room.state.answers[userId]) return;
 
-            io.to(roomId).emit('memematch:submission_count', {
-                submitted: room.state.submissions.length,
+            // Record answer with timestamp
+            const isCorrect = answer === room.state.correctMovie;
+            room.state.answers[userId] = {
+                answer,
+                timestamp: Date.now(),
+                isCorrect
+            };
+
+            // Notify all players of answer count
+            io.to(roomId).emit('memematch:answer_count', {
+                answered: Object.keys(room.state.answers).length,
                 total: room.players.length
             });
 
-            if (room.state.submissions.length === room.players.length) {
-                handlers.checkMemePhaseCompletion(io, roomId, gameRooms);
+            // If everyone answered, end round immediately
+            if (Object.keys(room.state.answers).length === room.players.length) {
+                handlers.endMemeMatchRound(io, roomId, gameRooms);
             }
-        });
-
-        socket.on('memematch:vote', (data) => {
-            const { roomId, userId, submissionId } = data;
-            const room = gameRooms[roomId];
-
-            if (!room || room.state.phase !== 'voting') return;
-
-            const submission = room.state.submissions.find(s => s.submissionId === submissionId);
-            if (submission && submission.userId === userId) return;
-
-            room.state.votes[userId] = submissionId;
-
-            const targetSubmission = room.state.submissions.find(s => s.submissionId === submissionId);
-            if (targetSubmission && !targetSubmission.votes.includes(userId)) {
-                targetSubmission.votes.push(userId);
-            }
-
-            io.to(roomId).emit('memematch:vote_count', {
-                voted: Object.keys(room.state.votes).length,
-                total: room.players.length
-            });
-
-            // Always check for completion after a vote is recorded
-            handlers.checkMemePhaseCompletion(io, roomId, gameRooms);
         });
 
         socket.on('memematch:leave', (roomId) => {
