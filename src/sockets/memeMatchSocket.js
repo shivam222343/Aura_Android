@@ -358,9 +358,8 @@ const handlers = {
                 total: room.players.length
             });
 
-            if (Object.keys(room.state.votes).length === room.players.length) {
-                handlers.checkMemePhaseCompletion(io, roomId, gameRooms);
-            }
+            // Always check for completion after a vote is recorded
+            handlers.checkMemePhaseCompletion(io, roomId, gameRooms);
         });
 
         socket.on('memematch:leave', (roomId) => {

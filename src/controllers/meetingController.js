@@ -394,7 +394,7 @@ exports.startAttendance = async (req, res) => {
 
         meeting.attendanceCode = code;
         meeting.isAttendanceActive = true;
-        meeting.status = 'Ongoing'; // Automatically make meeting Ongoing
+        meeting.status = 'ongoing'; // Automatically make meeting Ongoing
         // Expires in 15 mins
         // meeting.qrCode.expiresAt = new Date(Date.now() + 15*60000); 
 
@@ -536,7 +536,7 @@ exports.manualAttendance = async (req, res) => {
             }
         });
 
-        meeting.status = 'Ongoing'; // Automatically make meeting Ongoing
+        meeting.status = 'ongoing'; // Automatically make meeting ongoing
         await meeting.save();
 
         // Invalidate caches

@@ -416,6 +416,14 @@ exports.removeMemberFromClub = async (req, res) => {
             });
         }
 
+        const club = await Club.findById(clubId);
+        if (!club) {
+            return res.status(404).json({
+                success: false,
+                message: 'Club not found'
+            });
+        }
+
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({
@@ -454,11 +462,15 @@ exports.removeMemberFromClub = async (req, res) => {
         await delCache(`club:members:${clubId}`);
 
         // Send Push Notification (User removed)
-        await sendPushNotification(userId, {
-            title: `Removed from ${club.name}`,
-            body: `You have been removed from the club ${club.name}.`,
-            data: { screen: 'Dashboard' }
-        });
+        try {
+            await sendPushNotification(userId, {
+                title: `Removed from ${club.name}`,
+                body: `You have been removed from the club ${club.name}.`,
+                data: { screen: 'Dashboard' }
+            });
+        } catch (pushErr) {
+            console.error('Push notification error in removeMember:', pushErr);
+        }
 
         res.status(200).json({
             success: true,
