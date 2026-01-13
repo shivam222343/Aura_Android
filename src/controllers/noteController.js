@@ -83,7 +83,12 @@ exports.getNotes = async (req, res) => {
             query = {
                 $or: [
                     { userId: req.user._id }, // All personal notes
-                    { clubId: { $in: joinedClubIds }, isPublic: true } // Public notes from ALL joined clubs
+                    {
+                        $or: [
+                            { clubId: { $in: joinedClubIds }, isPublic: true },
+                            { clubId: null, isPublic: true }
+                        ]
+                    }
                 ]
             };
         }
@@ -172,6 +177,7 @@ exports.updateNote = async (req, res) => {
         if (title !== undefined) updateData.title = title;
         if (content !== undefined) updateData.content = content;
         if (styles !== undefined) updateData.styles = styles;
+        if (clubId !== undefined && isOwner) updateData.clubId = clubId;
         if (isPublic !== undefined && isOwner) updateData.isPublic = isPublic;
 
         updateData.lastModifiedBy = req.user._id;
