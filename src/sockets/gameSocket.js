@@ -305,6 +305,34 @@ module.exports = (io, socket) => {
 
         const isCorrect = normalizedGuess === normalizedWord;
 
+        // Calculate similarity percentage using Levenshtein distance
+        const calculateSimilarity = (str1, str2) => {
+            const len1 = str1.length;
+            const len2 = str2.length;
+            const matrix = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0));
+
+            for (let i = 0; i <= len1; i++) matrix[i][0] = i;
+            for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+
+            for (let i = 1; i <= len1; i++) {
+                for (let j = 1; j <= len2; j++) {
+                    const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(
+                        matrix[i - 1][j] + 1,
+                        matrix[i][j - 1] + 1,
+                        matrix[i - 1][j - 1] + cost
+                    );
+                }
+            }
+
+            const distance = matrix[len1][len2];
+            const maxLen = Math.max(len1, len2);
+            return ((maxLen - distance) / maxLen) * 100;
+        };
+
+        const similarity = calculateSimilarity(normalizedGuess, normalizedWord);
+        const isVeryClose = !isCorrect && similarity >= 70 && similarity < 100;
+
         // Check if already guessed correctly
         const alreadyGuessed = room.state.correctGuessers.includes(userId);
 
@@ -349,11 +377,13 @@ module.exports = (io, socket) => {
                 }
             }
         } else if (!isCorrect) {
-            // Wrong guess - add to feed
+            // Wrong guess - add to feed with similarity indicator
             room.state.guesses.unshift({
                 userId,
                 userName,
+                guess: guess,
                 isCorrect: false,
+                veryClose: isVeryClose,
                 timestamp: Date.now()
             });
 
