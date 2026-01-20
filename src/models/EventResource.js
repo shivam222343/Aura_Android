@@ -25,6 +25,11 @@ const EventResourceSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    linkType: {
+        type: String,
+        enum: ['canva', 'google-docs', 'google-slides', 'google-drive', 'google-sheets', 'figma', 'notion', 'other'],
+        default: 'other'
+    },
     publicId: {
         type: String, // For Cloudinary images/videos/docs
     },

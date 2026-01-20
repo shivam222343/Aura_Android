@@ -17,12 +17,13 @@ exports.getResources = async (req, res) => {
 
 exports.addLink = async (req, res) => {
     try {
-        const { eventId, clubId, title, url } = req.body;
+        const { eventId, clubId, title, url, linkType } = req.body;
         const resource = await EventResource.create({
             eventId,
             clubId,
             title,
             url,
+            linkType: linkType || 'other',
             type: 'link',
             uploadedBy: req.user._id
         });
