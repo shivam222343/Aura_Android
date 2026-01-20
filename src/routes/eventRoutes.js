@@ -5,6 +5,7 @@ const {
     createEvent,
     getAllEvents,
     getEventById,
+    updateEvent,
     deleteEvent
 } = require('../controllers/eventController');
 
@@ -16,6 +17,7 @@ router.route('/')
 
 router.route('/:id')
     .get(getEventById)
+    .put(authorize('admin'), updateEvent)
     .delete(authorize('admin'), deleteEvent);
 
 module.exports = router;
