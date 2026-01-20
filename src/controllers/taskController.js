@@ -193,6 +193,72 @@ exports.updateTaskStatus = async (req, res) => {
 };
 
 /**
+ * @desc    Update task details (Admin only)
+ * @route   PUT /api/tasks/:id
+ * @access  Private/Admin
+ */
+exports.updateTask = async (req, res) => {
+    try {
+        const { title, description, assignedTo, dueDate, priority, meetingId } = req.body;
+        const task = await Task.findById(req.params.id);
+
+        if (!task) {
+            return res.status(404).json({ success: false, message: 'Task not found' });
+        }
+
+        // Check if admin, subadmin or the one who assigned it
+        const canEdit = req.user.role === 'admin' ||
+            req.user.role === 'subadmin' ||
+            task.assignedBy.toString() === req.user._id.toString();
+
+        if (!canEdit) {
+            return res.status(403).json({ success: false, message: 'Not authorized to edit this task' });
+        }
+
+        if (title) task.title = title;
+        if (description) task.description = description;
+        if (dueDate) task.dueDate = dueDate;
+        if (priority) task.priority = priority;
+        if (meetingId) task.meetingId = meetingId;
+
+        if (assignedTo && Array.isArray(assignedTo)) {
+            // Re-map assignees while preserving status if possible
+            const newAssignees = assignedTo.map(userId => {
+                const existing = task.assignedTo.find(a => a.user.toString() === userId.toString());
+                return {
+                    user: userId,
+                    status: existing ? existing.status : 'pending',
+                    completedAt: existing ? existing.completedAt : null
+                };
+            });
+            task.assignedTo = newAssignees;
+        }
+
+        await task.save();
+
+        const populatedTask = await Task.findById(task._id)
+            .populate('assignedTo.user', 'displayName profilePicture')
+            .populate('assignedBy', 'displayName')
+            .populate('meetingId', 'name date');
+
+        // Emit socket event
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`club:${task.clubId}`).emit('task_update', populatedTask);
+        }
+
+        // Invalidate caches
+        await delCache(`user:tasks:${req.user._id}:${task.clubId}`);
+        await delCache(`user:dashboard:${req.user._id}`);
+
+        res.status(200).json({ success: true, data: populatedTask });
+    } catch (error) {
+        console.error('Update task error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+/**
  * @desc    Delete task
  * @route   DELETE /api/tasks/:id
  * @access  Private/Admin

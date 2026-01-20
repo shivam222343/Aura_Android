@@ -1,6 +1,7 @@
 const Club = require('../models/Club');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const GroupChat = require('../models/GroupChat');
 const { sendPushNotification } = require('../utils/pushNotifications');
 const { uploadImageBuffer } = require('../config/cloudinary');
 const { getCache, setCache, delCache } = require('../utils/cache');
@@ -282,7 +283,6 @@ exports.addMemberToClub = async (req, res) => {
         await user.save();
 
         // Sync with GroupChat
-        const GroupChat = require('../models/GroupChat');
         let groupChat = await GroupChat.findOne({ clubId: club._id });
         if (groupChat) {
             const isAlreadyMember = groupChat.members.some(m => m.userId.toString() === user._id.toString());
@@ -309,23 +309,32 @@ exports.addMemberToClub = async (req, res) => {
         await delCache(`club:members:${clubId}`);
 
         // Create Persistent Notification
-        await Notification.create({
-            userId: user._id,
-            type: 'member_added',
-            title: `Welcome to ${club.name}! 🎊`,
-            message: `You have been added to the club ${club.name} as a ${user.role}.`,
-            clubId: clubId
-        });
+        try {
+            await Notification.create({
+                userId: user._id,
+                type: 'member_joined', // Fixed: was 'member_added' (not in enum)
+                title: `Welcome to ${club.name}! 🎊`,
+                message: `You have been added to the club ${club.name} as a ${user.role}.`,
+                clubId: clubId
+            });
+        } catch (notifErr) {
+            console.error('Notification creation error in addMember:', notifErr);
+            // Don't fail the whole request if local notification fails
+        }
 
         // Trigger in-app refresh for the user
         io?.to(user._id.toString()).emit('notification_receive', {});
 
         // Send Push Notification
-        await sendPushNotification(user._id, {
-            title: `Welcome to ${club.name}! 🎊`,
-            body: `You are now a member of ${club.name}.`,
-            data: { screen: 'Dashboard', clubId: clubId }
-        });
+        try {
+            await sendPushNotification(user._id, {
+                title: `Welcome to ${club.name}! 🎊`,
+                body: `You are now a member of ${club.name}.`,
+                data: { screen: 'Dashboard', clubId: clubId }
+            });
+        } catch (pushErr) {
+            console.error('Push notification error in addMember:', pushErr);
+        }
 
         res.status(200).json({
             success: true,
@@ -334,10 +343,16 @@ exports.addMemberToClub = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Add member error:', error);
+        console.error('[Club] Add member error details:', {
+            error: error.message,
+            stack: error.stack,
+            clubId,
+            maverickId
+        });
         res.status(500).json({
             success: false,
-            message: 'Error adding member'
+            message: 'Error adding member',
+            error: error.message
         });
     }
 };
