@@ -1,5 +1,5 @@
 const EventResource = require('../models/EventResource');
-const cloudinary = require('../config/cloudinary');
+const { cloudinary } = require('../config/cloudinary');
 
 exports.getResources = async (req, res) => {
     try {
