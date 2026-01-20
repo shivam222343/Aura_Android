@@ -37,23 +37,7 @@ const eventSchema = new mongoose.Schema({
         type: String,
         enum: ['upcoming', 'ongoing', 'completed', 'cancelled'],
         default: 'upcoming'
-    },
-    resources: [{
-        type: {
-            type: String,
-            enum: ['link', 'photo', 'video', 'doc'],
-            required: true
-        },
-        title: String,
-        url: String,
-        publicId: String,
-        format: String,
-        size: Number
-    }],
-    organizationalData: [{
-        label: String,
-        value: String
-    }]
+    }
 }, {
     timestamps: true
 });

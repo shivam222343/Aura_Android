@@ -96,6 +96,7 @@ app.use('/api/group-chat', require('./src/routes/groupChat'));
 app.use('/api/web-upload', require('./src/routes/webUpload'));
 app.use('/api/notes', require('./src/routes/notes'));
 app.use('/api/events', require('./src/routes/eventRoutes'));
+app.use('/api/resources', require('./src/routes/resourceRoutes'));
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
