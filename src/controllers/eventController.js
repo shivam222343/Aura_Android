@@ -1,6 +1,7 @@
 const Event = require('../models/Event');
 const { uploadImageBuffer, deleteImage } = require('../config/cloudinary');
 const { getCache, setCache, delCache } = require('../utils/cache');
+const { sendEventNotification } = require('../services/notificationHelpers');
 
 /**
  * @desc    Create a new event
@@ -37,6 +38,15 @@ exports.createEvent = async (req, res) => {
         });
 
         await delCache('events:all');
+
+        // Send push notification to club members
+        try {
+            await sendEventNotification(event, clubId);
+            console.log('✅ Event notification sent successfully');
+        } catch (notifError) {
+            console.error('❌ Failed to send event notification:', notifError);
+            // Don't fail the request if notification fails
+        }
 
         res.status(201).json({
             success: true,

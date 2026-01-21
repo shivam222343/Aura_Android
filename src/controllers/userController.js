@@ -83,3 +83,67 @@ exports.getBirthdaysToday = async (req, res) => {
         });
     }
 };
+
+/**
+ * @desc    Save FCM token for push notifications
+ * @route   PUT /api/users/fcm-token
+ * @access  Private
+ */
+exports.saveFCMToken = async (req, res) => {
+    try {
+        const { fcmToken } = req.body;
+
+        if (!fcmToken) {
+            return res.status(400).json({
+                success: false,
+                message: 'FCM token is required'
+            });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            req.user._id,
+            { fcmToken },
+            { new: true }
+        );
+
+        console.log(`✅ FCM token saved for user: ${user.displayName}`);
+
+        res.status(200).json({
+            success: true,
+            message: 'FCM token saved successfully'
+        });
+    } catch (error) {
+        console.error('Save FCM token error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error saving FCM token'
+        });
+    }
+};
+
+/**
+ * @desc    Remove FCM token (on logout)
+ * @route   DELETE /api/users/fcm-token
+ * @access  Private
+ */
+exports.removeFCMToken = async (req, res) => {
+    try {
+        await User.findByIdAndUpdate(
+            req.user._id,
+            { $unset: { fcmToken: 1 } }
+        );
+
+        console.log(`✅ FCM token removed for user: ${req.user.displayName}`);
+
+        res.status(200).json({
+            success: true,
+            message: 'FCM token removed successfully'
+        });
+    } catch (error) {
+        console.error('Remove FCM token error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error removing FCM token'
+        });
+    }
+};
