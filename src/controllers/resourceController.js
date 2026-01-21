@@ -100,3 +100,38 @@ exports.deleteResource = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+exports.updateResource = async (req, res) => {
+    try {
+        const { title, url, linkType, clubId } = req.body;
+        const resource = await EventResource.findById(req.params.id);
+
+        if (!resource) {
+            return res.status(404).json({ success: false, message: 'Resource not found' });
+        }
+
+        // Only uploader or admin can update
+        if (resource.uploadedBy.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Not authorized' });
+        }
+
+        if (title) resource.title = title;
+        if (clubId) resource.clubId = clubId;
+
+        // For links, also allow updating the URL and link type
+        if (resource.type === 'link') {
+            if (url) resource.url = url;
+            if (linkType) resource.linkType = linkType;
+        }
+
+        await resource.save();
+
+        // Populate and return
+        const updatedResource = await EventResource.findById(resource._id)
+            .populate('uploadedBy', 'name email avatar')
+            .populate('clubId', 'name');
+
+        res.json({ success: true, data: updatedResource });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
