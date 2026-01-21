@@ -1,13 +1,46 @@
 const admin = require('firebase-admin');
 
 // Initialize Firebase Admin SDK
-// Download service account key from Firebase Console > Project Settings > Service Accounts
-// Place the JSON file in a secure location (NOT in git)
-const serviceAccount = require('../../firebase-service-account.json');
+let firebaseInitialized = false;
 
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-});
+try {
+    // Try to initialize Firebase with environment variables (for production/Render)
+    if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+        console.log('🔥 Initializing Firebase with environment variables...');
+
+        admin.initializeApp({
+            credential: admin.credential.cert({
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            }),
+        });
+
+        firebaseInitialized = true;
+        console.log('✅ Firebase initialized successfully with environment variables');
+    }
+    // Try to use service account file (for local development)
+    else {
+        try {
+            const serviceAccount = require('../../firebase-service-account.json');
+
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount),
+            });
+
+            firebaseInitialized = true;
+            console.log('✅ Firebase initialized successfully with service account file');
+        } catch (fileError) {
+            console.warn('⚠️ Firebase service account file not found. Push notifications will be disabled.');
+            console.warn('💡 To enable push notifications:');
+            console.warn('   - For local: Place firebase-service-account.json in backend root');
+            console.warn('   - For production: Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL env vars');
+        }
+    }
+} catch (error) {
+    console.error('❌ Error initializing Firebase:', error.message);
+    console.warn('⚠️ Push notifications will be disabled');
+}
 
 /**
  * Send push notification to a single device
@@ -16,6 +49,10 @@ admin.initializeApp({
  * @param {object} data - Additional data payload
  */
 const sendPushNotification = async (fcmToken, notification, data = {}) => {
+    if (!firebaseInitialized) {
+        console.warn('⚠️ Firebase not initialized. Skipping push notification.');
+        return { success: false, error: 'Firebase not initialized' };
+    }
     try {
         const message = {
             notification: {
@@ -62,6 +99,10 @@ const sendPushNotification = async (fcmToken, notification, data = {}) => {
  * @param {object} data - Additional data payload
  */
 const sendMulticastPushNotification = async (fcmTokens, notification, data = {}) => {
+    if (!firebaseInitialized) {
+        console.warn('⚠️ Firebase not initialized. Skipping multicast push notification.');
+        return { success: false, error: 'Firebase not initialized' };
+    }
     try {
         const message = {
             notification: {
@@ -111,6 +152,10 @@ const sendMulticastPushNotification = async (fcmTokens, notification, data = {})
  * @param {object} data - Additional data payload
  */
 const sendTopicNotification = async (topic, notification, data = {}) => {
+    if (!firebaseInitialized) {
+        console.warn('⚠️ Firebase not initialized. Skipping topic notification.');
+        return { success: false, error: 'Firebase not initialized' };
+    }
     try {
         const message = {
             notification: {
@@ -141,6 +186,10 @@ const sendTopicNotification = async (topic, notification, data = {}) => {
  * @param {string} topic - Topic name
  */
 const subscribeToTopic = async (fcmTokens, topic) => {
+    if (!firebaseInitialized) {
+        console.warn('⚠️ Firebase not initialized. Skipping topic subscription.');
+        return { success: false, error: 'Firebase not initialized' };
+    }
     try {
         const response = await admin.messaging().subscribeToTopic(fcmTokens, topic);
         console.log(`✅ Subscribed ${response.successCount} devices to topic: ${topic}`);
