@@ -317,6 +317,8 @@ exports.deleteMeeting = async (req, res) => {
         }
 
         const clubId = meeting.clubId;
+        const wasCompleted = meeting.status === 'completed';
+
         await meeting.deleteOne();
 
         // Invalidate meetings cache
@@ -325,9 +327,46 @@ exports.deleteMeeting = async (req, res) => {
 
         res.status(200).json({ success: true, message: 'Meeting deleted successfully' });
 
+        // If meeting was completed, we need to revert/recalculate the counts for members
+        if (wasCompleted) {
+            console.log(`[Meeting] Recalculating streaks for club ${clubId} after deletion...`);
+            const members = await User.find({ 'clubsJoined.clubId': clubId });
+
+            // Get all remaining completed meetings for this club
+            const completedMeetings = await Meeting.find({
+                clubId,
+                status: 'completed'
+            }).sort({ date: -1, createdAt: -1 });
+
+            // Recalculate streak for each member
+            for (let member of members) {
+                let streak = 0;
+                for (let m of completedMeetings) {
+                    const attendance = m.attendees.find(a =>
+                        (a.userId?._id || a.userId)?.toString() === member._id.toString()
+                    );
+
+                    if (attendance && (attendance.status === 'present' || attendance.status === 'late')) {
+                        // User attended, streak breaks
+                        break;
+                    } else {
+                        // User was absent or attendance record missing (assume absent if meeting was completed)
+                        streak++;
+                    }
+                }
+
+                // Update the user's consecutiveAbsences for this specific club
+                await User.updateOne(
+                    { _id: member._id, 'clubsJoined.clubId': clubId },
+                    { $set: { 'clubsJoined.$.consecutiveAbsences': streak } }
+                );
+            }
+        }
+
         // Emit socket event
         emitToClub(req, clubId, 'meeting_deleted', { meetingId: req.params.id });
     } catch (error) {
+        console.error('Error deleting meeting:', error);
         res.status(500).json({ success: false, message: 'Error deleting meeting' });
     }
 };
