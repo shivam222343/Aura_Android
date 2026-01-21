@@ -67,6 +67,10 @@ const userSchema = new mongoose.Schema({
         joinedAt: {
             type: Date,
             default: Date.now
+        },
+        consecutiveAbsences: {
+            type: Number,
+            default: 0
         }
     }],
     isOnline: {

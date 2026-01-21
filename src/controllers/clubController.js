@@ -219,6 +219,56 @@ exports.updateClubLogoBase64 = async (req, res) => {
 };
 
 /**
+ * @desc    Get members with attendance warnings (3+ missed)
+ * @route   GET /api/clubs/:id/members-warnings
+ * @access  Admin/Club Admin
+ */
+exports.getClubMembersWithWarnings = async (req, res) => {
+    try {
+        const clubId = req.params.id;
+
+        // Verify authorization (Admin or Club Admin)
+        const userClubRole = req.user.clubsJoined.find(c => c.clubId.toString() === clubId.toString())?.role;
+        if (req.user.role !== 'admin' && userClubRole !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Not authorized to view warnings' });
+        }
+
+        const users = await User.find({
+            'clubsJoined': {
+                $elemMatch: {
+                    clubId: clubId,
+                    consecutiveAbsences: { $gte: 3 }
+                }
+            }
+        }).select('displayName maverickId email phoneNumber clubsJoined');
+
+        // Filter and format for display/export
+        const results = users.map(user => {
+            const clubInfo = user.clubsJoined.find(c => c.clubId.toString() === clubId.toString());
+            return {
+                id: user._id,
+                displayName: user.displayName,
+                maverickId: user.maverickId,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                role: clubInfo.role,
+                consecutiveAbsences: clubInfo.consecutiveAbsences,
+                joinedAt: clubInfo.joinedAt
+            };
+        });
+
+        res.status(200).json({
+            success: true,
+            count: results.length,
+            data: results
+        });
+    } catch (error) {
+        console.error('Get attendance warnings error:', error);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+/**
  * @desc    Add member to club via Maverick ID
  * @route   POST /api/clubs/add-member
  * @access  Admin/Subadmin

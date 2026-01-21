@@ -9,6 +9,7 @@ const {
     updateClubLogoBase64,
     addMemberToClub,
     getClubMembers,
+    getClubMembersWithWarnings,
     removeMemberFromClub,
     deleteClub
 } = require('../controllers/clubController');
@@ -18,6 +19,7 @@ router.get('/', protect, getAllClubs);
 router.get('/:id/members', protect, getClubMembers);
 router.put('/:id', protect, uploadImage.single('logo'), handleMulterError, updateClub);
 router.put('/:id/logo-base64', protect, updateClubLogoBase64);
+router.get('/:id/members-warnings', protect, getClubMembersWithWarnings);
 
 // Admin routes
 router.post('/', protect, authorize('admin'), uploadImage.single('logo'), handleMulterError, createClub);

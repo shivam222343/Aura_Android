@@ -198,6 +198,62 @@ exports.updateMeetingStatus = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
+        // Process attendance streaks if meeting is completed
+        if (status === 'completed' && meeting.status !== 'completed') {
+            const attendees = meeting.attendees
+                .filter(a => a.status === 'present' || a.status === 'late')
+                .map(a => a.userId.toString());
+
+            // Reset Streak for present members
+            await User.updateMany(
+                { _id: { $in: attendees }, 'clubsJoined.clubId': meeting.clubId },
+                { $set: { 'clubsJoined.$.consecutiveAbsences': 0 } }
+            );
+
+            // Increment Streak for absent members
+            // We only increment if the user is a member of the club
+            await User.updateMany(
+                {
+                    'clubsJoined.clubId': meeting.clubId,
+                    _id: { $nin: attendees }
+                },
+                { $inc: { 'clubsJoined.$.consecutiveAbsences': 1 } }
+            );
+
+            // Get members who need notifications (2 or 3+ missed)
+            const warnedMembers = await User.find({
+                'clubsJoined': {
+                    $elemMatch: {
+                        clubId: meeting.clubId,
+                        consecutiveAbsences: { $gte: 2 }
+                    }
+                }
+            });
+
+            for (const member of warnedMembers) {
+                const clubData = member.clubsJoined.find(c => c.clubId.toString() === meeting.clubId.toString());
+                if (clubData) {
+                    if (clubData.consecutiveAbsences === 2) {
+                        try {
+                            await sendPushNotification(member._id, {
+                                title: 'We missed you! 😔',
+                                body: `Hey! We noticed you missed our last 2 meetings for ${meeting.name}. 📅 Please try to attend the next one, as missing 3 in a row might lead to restrictions. 🤝`,
+                                data: { type: 'attendance_warning', streak: 2, clubId: meeting.clubId.toString() }
+                            }, req);
+                        } catch (err) { console.error('Warning push error:', err); }
+                    } else if (clubData.consecutiveAbsences >= 3) {
+                        try {
+                            await sendPushNotification(member._id, {
+                                title: '⚠️ Immediate Warning: Attendance',
+                                body: `Urgent! You have missed 3 consecutive meetings. 🚨 Please contact your club admin immediately to avoid being removed from the club. 📞`,
+                                data: { type: 'attendance_warning', streak: 3, clubId: meeting.clubId.toString() }
+                            }, req);
+                        } catch (err) { console.error('Warning call push error:', err); }
+                    }
+                }
+            }
+        }
+
         meeting.status = status;
         await meeting.save();
 
@@ -468,6 +524,12 @@ exports.markAttendance = async (req, res) => {
 
         await meeting.save();
 
+        // Reset consecutive absences for this club
+        await User.updateOne(
+            { _id: req.user._id, 'clubsJoined.clubId': meeting.clubId },
+            { $set: { 'clubsJoined.$.consecutiveAbsences': 0 } }
+        );
+
         // Invalidate caches
         await delCache(`club:meetings:${meeting.clubId}`);
         await delCache(`user:dashboard:${req.user._id}`);
@@ -538,6 +600,14 @@ exports.manualAttendance = async (req, res) => {
 
         meeting.status = 'ongoing'; // Automatically make meeting ongoing
         await meeting.save();
+
+        // Reset consecutive absences for these users in this club
+        if (status === 'present') {
+            await User.updateMany(
+                { _id: { $in: userIds }, 'clubsJoined.clubId': meeting.clubId },
+                { $set: { 'clubsJoined.$.consecutiveAbsences': 0 } }
+            );
+        }
 
         // Invalidate caches
         await delCache(`club:meetings:${meeting.clubId}`);
