@@ -1,7 +1,7 @@
 {
-  "name": "mavericks-backend",
+  "name": "aura-backend",
   "version": "1.0.0",
-  "description": "Backend API for Mavericks Club Management Platform",
+  "description": "Backend API for Aura Artist Creativity Club Platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

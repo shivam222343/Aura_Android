@@ -129,12 +129,12 @@ const userSchema = new mongoose.Schema({
 
 // Pre-save middleware to generate Maverick ID and hash password
 userSchema.pre('save', async function (next) {
-    // Generate Maverick ID for new users
+    // Generate Artist ID for new users
     if (this.isNew && !this.maverickId) {
-        // Generate unique 8-character ID (e.g., MAV-A1B2C3D4)
-        const generateMaverickId = () => {
+        // Generate unique 8-character ID (e.g., ARTIST-A1B2C3D4)
+        const generateArtistId = () => {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let id = 'MAV-';
+            let id = 'ARTIST-';
             for (let i = 0; i < 8; i++) {
                 id += chars.charAt(Math.floor(Math.random() * chars.length));
             }
@@ -144,7 +144,7 @@ userSchema.pre('save', async function (next) {
         // Ensure uniqueness
         let isUnique = false;
         while (!isUnique) {
-            this.maverickId = generateMaverickId();
+            this.maverickId = generateArtistId();
             const existing = await this.constructor.findOne({ maverickId: this.maverickId });
             if (!existing) isUnique = true;
         }

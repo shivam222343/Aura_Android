@@ -73,7 +73,7 @@ app.set('io', io);
 // Routes
 app.get('/', (req, res) => {
     res.json({
-        message: 'Mavericks Club Management API',
+        message: 'Aura Artist Creativity API',
         version: '1.0.0',
         status: 'running'
     });
@@ -152,7 +152,7 @@ io.on('connection', (socket) => {
     });
 
     /**
-     * Maverick Games Socket Handlers
+     * Aura Games Socket Handlers
      */
     require('./src/sockets/gameSocket')(io, socket);
     require('./src/sockets/noteSocket')(io, socket);
@@ -193,7 +193,7 @@ io.on('connection', (socket) => {
         // Push notification for general update
         await sendPushNotification(
             userId,
-            notification.title || 'Mavericks Update',
+            notification.title || 'Aura Update',
             notification.message || 'You have a new notification',
             { type: 'general_notification', ...notification }
         );
