@@ -51,6 +51,7 @@ const sectionSchema = new mongoose.Schema({
 const customFormSchema = new mongoose.Schema({
     title: { type: String, required: true },
     description: { type: String },
+    bannerImage: { type: String }, // Top banner image URL
     status: {
         type: String,
         enum: ['draft', 'published', 'closed'],
