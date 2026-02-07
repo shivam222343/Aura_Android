@@ -184,3 +184,24 @@ exports.getFormAnalytics = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// Delete a single response (Admin only)
+exports.deleteResponse = async (req, res) => {
+    try {
+        const response = await FormResponse.findById(req.params.responseId);
+        if (!response) {
+            return res.status(404).json({ success: false, message: 'Response not found' });
+        }
+
+        // Check if user owns the form
+        const form = await CustomForm.findOne({ _id: response.formId, createdBy: req.user.id });
+        if (!form) {
+            return res.status(403).json({ success: false, message: 'Unauthorized to delete this response' });
+        }
+
+        await FormResponse.findByIdAndDelete(req.params.responseId);
+        res.status(200).json({ success: true, message: 'Response deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

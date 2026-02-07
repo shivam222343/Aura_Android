@@ -19,6 +19,7 @@ router.get('/admin/all', customFormController.getAdminForms);
 router.put('/:id', customFormController.updateForm);
 router.delete('/:id', customFormController.deleteForm);
 router.get('/:id/responses', customFormController.getResponses);
+router.delete('/response/:responseId', customFormController.deleteResponse);
 router.get('/:id/analytics', customFormController.getFormAnalytics);
 
 module.exports = router;
