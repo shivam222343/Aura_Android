@@ -142,6 +142,30 @@ exports.getFormAnalytics = async (req, res) => {
         }
 
         const responses = await FormResponse.find({ formId: req.params.id });
+
+        // Calculate weekly trends
+        const trends = {};
+        const now = new Date();
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - i);
+            trends[d.toISOString().split('T')[0]] = 0;
+        }
+
+        // Calculate heatmap and hourly distribution
+        const heatmap = {};
+        const hourlyStats = Array(24).fill(0);
+
+        responses.forEach(resp => {
+            const dateStr = resp.createdAt.toISOString().split('T')[0];
+            if (trends[dateStr] !== undefined) trends[dateStr]++;
+            heatmap[dateStr] = (heatmap[dateStr] || 0) + 1;
+
+            // Hourly distribution
+            const hour = resp.createdAt.getHours();
+            hourlyStats[hour]++;
+        });
+
         const analytics = [];
 
         form.sections.forEach(section => {
@@ -179,7 +203,14 @@ exports.getFormAnalytics = async (req, res) => {
             });
         });
 
-        res.status(200).json({ success: true, data: analytics, totalResponses: responses.length });
+        res.status(200).json({
+            success: true,
+            data: analytics,
+            totalResponses: responses.length,
+            trends,
+            heatmap,
+            hourlyStats
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
