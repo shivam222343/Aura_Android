@@ -134,3 +134,53 @@ exports.uploadFile = async (req, res) => {
         res.status(500).json({ success: false, message: 'Upload failed' });
     }
 };
+exports.getFormAnalytics = async (req, res) => {
+    try {
+        const form = await CustomForm.findOne({ _id: req.params.id, createdBy: req.user.id });
+        if (!form) {
+            return res.status(404).json({ success: false, message: 'Form not found or unauthorized' });
+        }
+
+        const responses = await FormResponse.find({ formId: req.params.id });
+        const analytics = [];
+
+        form.sections.forEach(section => {
+            section.questions.forEach(q => {
+                const questionData = {
+                    id: q.id,
+                    label: q.label,
+                    type: q.type,
+                    stats: {}
+                };
+
+                if (['radio', 'dropdown', 'checkbox'].includes(q.type)) {
+                    responses.forEach(resp => {
+                        const ans = resp.answers[q.id];
+                        if (ans) {
+                            const answersArray = Array.isArray(ans) ? ans : [ans];
+                            answersArray.forEach(val => {
+                                questionData.stats[val] = (questionData.stats[val] || 0) + 1;
+                            });
+                        }
+                    });
+                    analytics.push(questionData);
+                } else if (q.type === 'number') {
+                    const values = responses.map(resp => Number(resp.answers[q.id])).filter(v => !isNaN(v));
+                    if (values.length > 0) {
+                        questionData.stats = {
+                            average: values.reduce((a, b) => a + b, 0) / values.length,
+                            min: Math.min(...values),
+                            max: Math.max(...values),
+                            total: values.length
+                        };
+                        analytics.push(questionData);
+                    }
+                }
+            });
+        });
+
+        res.status(200).json({ success: true, data: analytics, totalResponses: responses.length });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
