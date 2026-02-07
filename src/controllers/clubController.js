@@ -67,7 +67,7 @@ exports.createClub = async (req, res) => {
 
         // Handle image upload if provided
         if (req.file) {
-            const result = await uploadImageBuffer(req.file.buffer, 'mavericks/clubs');
+            const result = await uploadImageBuffer(req.file.buffer, 'aura/collectives');
             logo = {
                 url: result.url,
                 publicId: result.publicId
@@ -138,7 +138,7 @@ exports.updateClub = async (req, res) => {
         // Handle Image Upload
         if (req.file) {
             try {
-                const result = await uploadImageBuffer(req.file.buffer, 'mavericks/clubs');
+                const result = await uploadImageBuffer(req.file.buffer, 'aura/collectives');
                 club.logo = {
                     url: result.url,
                     publicId: result.publicId
@@ -197,7 +197,7 @@ exports.updateClubLogoBase64 = async (req, res) => {
         const buffer = Buffer.from(base64Data, 'base64');
 
         // Upload to Cloudinary
-        const result = await uploadImageBuffer(buffer, 'mavericks/clubs');
+        const result = await uploadImageBuffer(buffer, 'aura/collectives');
 
         club.logo = {
             url: result.url,
@@ -282,7 +282,7 @@ exports.addMemberToClub = async (req, res) => {
         if (!clubId || !maverickId) {
             return res.status(400).json({
                 success: false,
-                message: 'Club ID and Maverick ID are required'
+                message: 'Collective ID and Artist-id are required'
             });
         }
 
@@ -300,10 +300,10 @@ exports.addMemberToClub = async (req, res) => {
 
         const user = await User.findOne({ maverickId: normalizedMavId });
         if (!user) {
-            console.log(`[Club] User not found: ${normalizedMavId}`);
+            console.log(`[Collective] User not found: ${normalizedMavId}`);
             return res.status(404).json({
                 success: false,
-                message: `User with Maverick ID '${normalizedMavId}' not found. Please check the ID.`
+                message: `User with Artist-id '${normalizedMavId}' not found. Please check the ID.`
             });
         }
 
@@ -315,7 +315,7 @@ exports.addMemberToClub = async (req, res) => {
         if (isMember) {
             return res.status(400).json({
                 success: false,
-                message: `User '${user.displayName}' is already a member or admin of this club`
+                message: `User '${user.displayName}' is already a member or admin of this collective`
             });
         }
 
@@ -364,7 +364,7 @@ exports.addMemberToClub = async (req, res) => {
                 userId: user._id,
                 type: 'member_joined', // Fixed: was 'member_added' (not in enum)
                 title: `Welcome to ${club.name}! 🎊`,
-                message: `You have been added to the club ${club.name} as a ${user.role}.`,
+                message: `You have been added to the collective ${club.name} as a ${user.role}.`,
                 clubId: clubId
             });
         } catch (notifErr) {
@@ -477,7 +477,7 @@ exports.removeMemberFromClub = async (req, res) => {
         if (!clubId || !userId) {
             return res.status(400).json({
                 success: false,
-                message: 'Club ID and User ID are required'
+                message: 'Collective ID and User ID are required'
             });
         }
 

@@ -14,6 +14,7 @@ const { connectRedis } = require('./src/config/redis');
 
 // Initialize Express app
 const app = express();
+app.set('trust proxy', 1); // Trust Render proxy
 const server = http.createServer(app);
 
 // Initialize Socket.io
@@ -97,6 +98,7 @@ app.use('/api/web-upload', require('./src/routes/webUpload'));
 app.use('/api/notes', require('./src/routes/notes'));
 app.use('/api/events', require('./src/routes/eventRoutes'));
 app.use('/api/resources', require('./src/routes/resourceRoutes'));
+app.use('/api/custom-forms', require('./src/routes/customFormRoutes'));
 
 // Socket.io connection handling
 io.on('connection', (socket) => {

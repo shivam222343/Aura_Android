@@ -16,12 +16,12 @@ exports.renderUploadPage = async (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Media Upload | Mavericks</title>
+    <title>Aura | Creative Upload</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #0A66C2;
-            --primary-dark: #004182;
+            --primary: #8B5CF6;
+            --primary-dark: #6D28D9;
             --bg: #F3F2EF;
             --card: #FFFFFF;
             --text: #191919;
@@ -243,15 +243,15 @@ exports.renderUploadPage = async (req, res) => {
 <body>
     <div class="container">
         <div class="logo">
-            <span>Mavericks</span>
+            <span>Aura</span>
         </div>
         <div class="type-badge">${type || 'Media'} Upload</div>
-        <h1>Select Media</h1>
-        <p>Choose a photo or video to upload to Mavericks.</p>
+        <h1>Select Your Work</h1>
+        <p>Choose an artistic expression to upload to Aura.</p>
 
         <form id="uploadForm">
             <div class="upload-area" id="dropArea">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#0A66C2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 <span>Tap to browse files</span>
                 <input type="file" id="fileInput" name="file" accept="image/*,video/*" required>
                 <div id="file-info">Selected file: <span id="file-name"></span></div>
@@ -259,7 +259,7 @@ exports.renderUploadPage = async (req, res) => {
 
             <button type="submit" id="submitBtn" class="btn">
                 <span class="loader-spin" id="loader"></span>
-                <span id="btnText">Upload Media</span>
+                <span id="btnText">Upload Work</span>
             </button>
         </form>
 
@@ -272,7 +272,7 @@ exports.renderUploadPage = async (req, res) => {
 
         <div id="status"></div>
 
-        <a href="${redirectUrl || 'mavericks://upload-success'}" id="return-btn" class="btn">Cancel & Return</a>
+        <a href="${redirectUrl || 'aura://upload-success'}" id="return-btn" class="btn">Cancel & Return</a>
     </div>
 
     <script>
@@ -338,7 +338,7 @@ exports.renderUploadPage = async (req, res) => {
 
                     const mediaUrl = encodeURIComponent(result.data.url);
                     const publicId = encodeURIComponent(result.data.publicId || '');
-                    const baseUrl = "${redirectUrl || 'mavericks://upload-success'}";
+                    const baseUrl = "${redirectUrl || 'aura://upload-success'}";
                     const separator = baseUrl.includes('?') ? '&' : '?';
                     const deepLink = baseUrl + separator + "url=" + mediaUrl + "&publicId=" + publicId;
 
@@ -372,7 +372,7 @@ exports.renderUploadPage = async (req, res) => {
                 progressContainer.style.display = 'none';
 
                 // Allow returning with error
-                const baseUrl = "${redirectUrl || 'mavericks://upload-success'}";
+                const baseUrl = "${redirectUrl || 'aura://upload-success'}";
                 const separator = baseUrl.includes('?') ? '&' : '?';
                 const errorLink = baseUrl + separator + "error=" + encodeURIComponent(msg);
                 returnBtn.href = errorLink;
@@ -384,7 +384,7 @@ exports.renderUploadPage = async (req, res) => {
         // Handle Cancel
         document.getElementById('return-btn').addEventListener('click', (e) => {
             if (!e.target.href.includes('url=') && !e.target.href.includes('error=')) {
-                const baseUrl = "${redirectUrl || 'mavericks://upload-success'}";
+                const baseUrl = "${redirectUrl || 'aura://upload-success'}";
                 const separator = baseUrl.includes('?') ? '&' : '?';
                 e.target.href = baseUrl + separator + "status=cancelled";
             }
@@ -425,12 +425,12 @@ exports.handleWebUpload = async (req, res) => {
 
         // Determine folder based on context if provided
         const { type } = req.body;
-        let folder = 'mavericks/others';
+        let folder = 'aura/others';
 
-        if (type === 'profile') folder = 'mavericks/profiles';
-        else if (type === 'gallery') folder = 'mavericks/gallery';
-        else if (type === 'message' || type === 'chat') folder = 'mavericks/chat';
-        else if (type === 'snap') folder = 'mavericks/snaps';
+        if (type === 'profile') folder = 'aura/profiles';
+        else if (type === 'gallery') folder = 'aura/gallery';
+        else if (type === 'message' || type === 'chat') folder = 'aura/chat';
+        else if (type === 'snap') folder = 'aura/expressions';
 
         // Upload to Cloudinary using buffer
         const result = await uploadImageBuffer(req.file.buffer, folder);
@@ -463,11 +463,11 @@ exports.handleBase64Upload = async (req, res) => {
             return res.status(400).json({ success: false, message: 'No image data provided' });
         }
 
-        let folder = 'mavericks/others';
-        if (type === 'profile') folder = 'mavericks/profiles';
-        else if (type === 'gallery') folder = 'mavericks/gallery';
-        else if (type === 'message' || type === 'chat') folder = 'mavericks/chat';
-        else if (type === 'snap') folder = 'mavericks/snaps';
+        let folder = 'aura/others';
+        if (type === 'profile') folder = 'aura/profiles';
+        else if (type === 'gallery') folder = 'aura/gallery';
+        else if (type === 'message' || type === 'chat') folder = 'aura/chat';
+        else if (type === 'snap') folder = 'aura/expressions';
 
         const base64Data = image.split(',')[1] || image;
         const buffer = Buffer.from(base64Data, 'base64');

@@ -66,7 +66,7 @@ exports.getBirthdaysToday = async (req, res) => {
                 displayName: user.displayName,
                 profilePicture: user.profilePicture,
                 birthDate: user.birthDate,
-                clubName: commonClub?.clubId?.name || 'Mavericks',
+                clubName: commonClub?.clubId?.name || 'Aura',
                 maverickId: user.maverickId
             };
         });
