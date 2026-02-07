@@ -114,3 +114,23 @@ exports.getResponses = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+exports.uploadFile = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'No file uploaded' });
+        }
+
+        const { uploadImageBuffer } = require('../config/cloudinary');
+        const result = await uploadImageBuffer(req.file.buffer, 'aura/form-submissions');
+
+        res.status(200).json({
+            success: true,
+            url: result.url,
+            publicId: result.publicId
+        });
+    } catch (error) {
+        console.error('Form Upload Error:', error);
+        res.status(500).json({ success: false, message: 'Upload failed' });
+    }
+};

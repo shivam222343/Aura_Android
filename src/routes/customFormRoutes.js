@@ -3,9 +3,12 @@ const router = express.Router();
 const customFormController = require('../controllers/customFormController');
 const { protect, authorize } = require('../middleware/auth');
 
+const { uploadImage, handleMulterError } = require('../middleware/upload');
+
 // Public routes
 router.get('/:id', customFormController.getForm);
 router.post('/submit', customFormController.submitResponse);
+router.post('/upload', uploadImage.single('file'), handleMulterError, customFormController.uploadFile);
 
 // Protected routes (Admin only)
 router.use(protect);
