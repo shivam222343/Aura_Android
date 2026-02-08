@@ -97,15 +97,53 @@ exports.submitResponse = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Form is closed' });
         }
 
+        let score = 0;
+        let totalPossibleScore = 0;
+        const isQuiz = form.settings?.isQuiz || false;
+
+        if (isQuiz) {
+            form.sections.forEach(section => {
+                section.questions.forEach(q => {
+                    const userAnswer = answers[q.id];
+                    if (['radio', 'checkbox', 'dropdown'].includes(q.type)) {
+                        totalPossibleScore++; // Simple scoring: 1 point per question
+                        const correctOptions = q.options.filter(opt => opt.isCorrect).map(opt => opt.label);
+
+                        if (q.type === 'checkbox') {
+                            if (Array.isArray(userAnswer)) {
+                                // For checkboxes, all correct must be selected and no incorrect
+                                const isAllCorrect = correctOptions.length > 0 &&
+                                    correctOptions.every(opt => userAnswer.includes(opt)) &&
+                                    userAnswer.every(opt => correctOptions.includes(opt));
+                                if (isAllCorrect) score++;
+                            }
+                        } else {
+                            // For radio and dropdown
+                            if (userAnswer && correctOptions.includes(userAnswer)) {
+                                score++;
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
         const response = new FormResponse({
             formId,
             submittedBy: req.user ? req.user.id : null,
             email: email || (req.user ? req.user.email : null),
-            answers
+            answers,
+            isQuiz,
+            score,
+            totalPossibleScore
         });
 
         await response.save();
-        res.status(201).json({ success: true, data: response });
+        res.status(201).json({
+            success: true,
+            data: response,
+            quizResult: isQuiz ? { score, totalPossibleScore, showMarks: form.settings.showMarks } : null
+        });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });
     }

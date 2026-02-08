@@ -77,7 +77,9 @@ const customFormSchema = new mongoose.Schema({
         showProgressBar: { type: Boolean, default: true },
         confirmationMessage: { type: String, default: 'Thank you for your response!' },
         isPublic: { type: Boolean, default: true },
-        closeDate: { type: Date }
+        closeDate: { type: Date },
+        isQuiz: { type: Boolean, default: false },
+        showMarks: { type: Boolean, default: false }
     },
     sections: [sectionSchema], // Representing pages
 }, {
