@@ -19,7 +19,12 @@ exports.createForm = async (req, res) => {
 // Get all forms for admin
 exports.getAdminForms = async (req, res) => {
     try {
-        const forms = await CustomForm.find({ createdBy: req.user.id }).sort('-createdAt');
+        const forms = await CustomForm.find({
+            $or: [
+                { createdBy: req.user.id },
+                { sharedWith: req.user.id }
+            ]
+        }).sort('-createdAt');
         res.status(200).json({ success: true, data: forms });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -29,7 +34,7 @@ exports.getAdminForms = async (req, res) => {
 // Get a single form (for editing or viewing)
 exports.getForm = async (req, res) => {
     try {
-        const form = await CustomForm.findById(req.params.id);
+        const form = await CustomForm.findById(req.params.id).populate('sharedWith', 'displayName email fullName profilePicture');
         if (!form) {
             return res.status(404).json({ success: false, message: 'Form not found' });
         }
@@ -43,7 +48,10 @@ exports.getForm = async (req, res) => {
 exports.updateForm = async (req, res) => {
     try {
         const form = await CustomForm.findOneAndUpdate(
-            { _id: req.params.id, createdBy: req.user.id },
+            {
+                _id: req.params.id,
+                $or: [{ createdBy: req.user.id }, { sharedWith: req.user.id }]
+            },
             req.body,
             { new: true, runValidators: true }
         );
@@ -59,7 +67,10 @@ exports.updateForm = async (req, res) => {
 // Delete a form
 exports.deleteForm = async (req, res) => {
     try {
-        const form = await CustomForm.findOneAndDelete({ _id: req.params.id, createdBy: req.user.id });
+        const form = await CustomForm.findOneAndDelete({
+            _id: req.params.id,
+            $or: [{ createdBy: req.user.id }, { sharedWith: req.user.id }]
+        });
         if (!form) {
             return res.status(404).json({ success: false, message: 'Form not found or unauthorized' });
         }
@@ -103,7 +114,10 @@ exports.submitResponse = async (req, res) => {
 // Get responses for a form (Admin only)
 exports.getResponses = async (req, res) => {
     try {
-        const form = await CustomForm.findOne({ _id: req.params.id, createdBy: req.user.id });
+        const form = await CustomForm.findOne({
+            _id: req.params.id,
+            $or: [{ createdBy: req.user.id }, { sharedWith: req.user.id }]
+        });
         if (!form) {
             return res.status(404).json({ success: false, message: 'Form not found or unauthorized' });
         }
@@ -136,7 +150,10 @@ exports.uploadFile = async (req, res) => {
 };
 exports.getFormAnalytics = async (req, res) => {
     try {
-        const form = await CustomForm.findOne({ _id: req.params.id, createdBy: req.user.id });
+        const form = await CustomForm.findOne({
+            _id: req.params.id,
+            $or: [{ createdBy: req.user.id }, { sharedWith: req.user.id }]
+        });
         if (!form) {
             return res.status(404).json({ success: false, message: 'Form not found or unauthorized' });
         }
@@ -224,8 +241,11 @@ exports.deleteResponse = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Response not found' });
         }
 
-        // Check if user owns the form
-        const form = await CustomForm.findOne({ _id: response.formId, createdBy: req.user.id });
+        // Check if user owns the form or has shared access
+        const form = await CustomForm.findOne({
+            _id: response.formId,
+            $or: [{ createdBy: req.user.id }, { sharedWith: req.user.id }]
+        });
         if (!form) {
             return res.status(403).json({ success: false, message: 'Unauthorized to delete this response' });
         }

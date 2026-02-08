@@ -230,3 +230,29 @@ exports.updateGameConfig = async (req, res) => {
         res.status(500).json({ success: false, message: 'Error updating game config' });
     }
 };
+
+/**
+ * @desc    Get all admin users
+ * @route   GET /api/admin/admins
+ * @access  Admin
+ */
+exports.getAdmins = async (req, res) => {
+    try {
+        const admins = await User.find({ role: 'admin' })
+            .select('displayName email fullName profilePicture maverickId')
+            .sort('displayName');
+
+        res.status(200).json({
+            success: true,
+            count: admins.length,
+            data: admins
+        });
+    } catch (error) {
+        console.error('Get admins error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching admins'
+        });
+    }
+};
+

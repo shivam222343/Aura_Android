@@ -7,7 +7,8 @@ const {
     changeUserRole,
     sendCustomNotification,
     getGames,
-    updateGameConfig
+    updateGameConfig,
+    getAdmins
 } = require('../controllers/adminController');
 const { getClubAttendanceReport } = require('../controllers/attendanceReportController');
 
@@ -20,6 +21,7 @@ router.use(authorize('admin')); // Restrict remaining routes to admin only
 
 router.get('/stats', getStats);
 router.get('/users', getAllUsers);
+router.get('/admins', getAdmins);
 router.put('/users/:id/role', changeUserRole);
 router.post('/send-notification', sendCustomNotification);
 router.post('/games', updateGameConfig);

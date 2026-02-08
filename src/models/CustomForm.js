@@ -63,6 +63,10 @@ const customFormSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
+    sharedWith: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
     settings: {
         collectEmail: { type: Boolean, default: false },
         allowMultipleResponses: { type: Boolean, default: true },
