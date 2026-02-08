@@ -7,7 +7,8 @@ const questionSchema = new mongoose.Schema({
         required: true,
         enum: [
             'short_text', 'long_text', 'number', 'email', 'phone',
-            'dropdown', 'radio', 'checkbox', 'image', 'file', 'date', 'time'
+            'dropdown', 'radio', 'checkbox', 'image', 'file', 'date', 'time',
+            'info_media'
         ]
     },
     label: { type: String, required: true },
@@ -17,8 +18,11 @@ const questionSchema = new mongoose.Schema({
     options: [{
         id: { type: String },
         label: { type: String },
-        image: { type: String }
+        image: { type: String },
+        isCorrect: { type: Boolean, default: false }
     }],
+    mediaUrl: { type: String }, // For info_media type
+    mediaType: { type: String, enum: ['image', 'file'] },
     validation: {
         minLength: { type: Number },
         maxLength: { type: Number },
